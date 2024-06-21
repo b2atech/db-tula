@@ -1,0 +1,7 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/src/b2a.db-tula/.vs/b2a.db-tula
+/src/b2a.db-tula/b2a.db-tula/bin/Debug/net8.0-windows
+/src/b2a.db-tula/b2a.db-tula/obj
