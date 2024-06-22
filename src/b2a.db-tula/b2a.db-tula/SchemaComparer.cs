@@ -199,7 +199,11 @@ namespace b2a.db_tula
                     var sourceDefinition = sourceSchemaFetcher.GetFunctionDefinition(function);
                     var targetDefinition = targetSchemaFetcher.GetFunctionDefinition(function);
                     bool isMatch = sourceDefinition == targetDefinition;
-                    differences.Add(new ComparisonResult { Type = "Function", SourceName = function, DestinationName = function, Comparison = isMatch ? "Matching" : "Not Matching" });
+                    differences.Add(new ComparisonResult { Type = "Function", 
+                        SourceName = function, 
+                        DestinationName = function, Comparison = isMatch ? "Matching" : "Not Matching",
+                    SourceDefinition = sourceDefinition,
+                    DestinationDefinition = targetDefinition});
                 }
             }
 
@@ -343,6 +347,8 @@ namespace b2a.db_tula
         public string DestinationName { get; set; }
         public string Comparison { get; set; }
         public string Details { get; set; } // Additional details for errors or exceptions
+        public string SourceDefinition { get; set; }
+        public string DestinationDefinition { get; set; }
         public List<ColumnComparisonResult> ColumnComparisonResults { get; set; }
     }
 

@@ -168,8 +168,8 @@ namespace b2a.db_tula
                     //    ? targetSchemaFetcher.GetFunctionDefinition(selectedItem.DestinationName)
                     //    : targetSchemaFetcher.GetProcedureDefinition(selectedItem.DestinationName);
 
-                    SourceCodeTextBox.Text = selectedItem.;
-                    TargetCodeTextBox.Text = targetCode;
+                    SourceCodeTextBox.Text = selectedItem.SourceDefinition;
+                    TargetCodeTextBox.Text = selectedItem.DestinationDefinition;
                 }
 
                 DetailsGrid.ItemsSource = detailsData;
