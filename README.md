@@ -20,7 +20,7 @@
 ### Steps
 1. **Clone the repository**
     ```sh
-    git clone https://github.com/yourusername/db-tula.git
+    git clone https://github.com/b2atech/db-tula.git
     cd db-tula
     ```
 
@@ -76,7 +76,7 @@ Contributions are welcome! Please follow these steps:
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE.md) file for more details.
 
 ## Contact
 
