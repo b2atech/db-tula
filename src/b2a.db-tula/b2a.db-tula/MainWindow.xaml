@@ -16,7 +16,7 @@
                     <Setter Property="Background" Value="LightSkyBlue" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Comparison}" Value="Missing in Target">
-                    <Setter Property="Background" Value="LightYellow" />
+                    <Setter Property="Background" Value="Orange" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
