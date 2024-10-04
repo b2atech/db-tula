@@ -2,14 +2,16 @@
 using System.Collections.Generic;
 using System;
 using System.Diagnostics;
+using b2a.db_tula.Models;
 
 namespace b2a.db_tula
 {
     public class SchemaComparer
     {
-        public List<ComparisonResult> CompareTables(DataTable sourceTables, DataTable targetTables, string sourceConnectionString, string targetConnectionString)
+        public List<ComparisonResult> CompareTables(DataTable sourceTables, DataTable targetTables, string sourceConnectionString, string targetConnectionString, Action<int, int> reportProgress)
         {
             var differences = new List<ComparisonResult>();
+
             try
             {
                 var sourceTableNames = new HashSet<string>();
@@ -23,41 +25,56 @@ namespace b2a.db_tula
                 {
                     targetTableNames.Add(row["table_name"].ToString());
                 }
+
+                int totalTables = sourceTableNames.Count + targetTableNames.Count; // Total number of tables to compare
+                int currentTableIndex = 0; // To track the progress
+
+                // Compare source tables with target tables
                 foreach (var table in sourceTableNames)
                 {
-                    var currentTableComparision = new ComparisonResult { Type = "Table", SourceName = table, DestinationName = table };
+                    var currentTableComparison = new ComparisonResult { Type = "Table", SourceName = table, DestinationName = table };
+
                     if (!targetTableNames.Contains(table))
                     {
-                        currentTableComparision.Comparison = "Missing in Target";
-                       
+                        currentTableComparison.Comparison = "Missing in Target";
                     }
                     else
                     {
-                        
                         // Compare columns
                         var sourceColumns = GetTableColumns(sourceConnectionString, table);
                         var targetColumns = GetTableColumns(targetConnectionString, table);
                         var columnComparisonResults = CompareColumns(sourceColumns, targetColumns, out bool allColumnsMatch);
-                        currentTableComparision.Comparison = allColumnsMatch? "Matching" : "Not Matching";
-                        currentTableComparision.ColumnComparisonResults = columnComparisonResults;
+                        currentTableComparison.Comparison = allColumnsMatch ? "Matching" : "Not Matching";
+                        currentTableComparison.ColumnComparisonResults = columnComparisonResults;
                     }
-                    differences.Add(currentTableComparision);
+
+                    differences.Add(currentTableComparison);
+
+                    // Increment progress and report it
+                    currentTableIndex++;
+                    reportProgress?.Invoke(currentTableIndex, totalTables); // Invoke the progress callback
                 }
 
+                // Check for tables in target that are missing in source
                 foreach (var table in targetTableNames)
                 {
                     if (!sourceTableNames.Contains(table))
                     {
                         differences.Add(new ComparisonResult { Type = "Table", SourceName = table, DestinationName = table, Comparison = "Missing in Source" });
                     }
+                    // Increment progress and report it
+                    currentTableIndex++;
+                    reportProgress?.Invoke(currentTableIndex, totalTables); // Invoke the progress callback
                 }
             }
             catch (Exception ex)
             {
                 differences.Add(new ComparisonResult { Type = "Error", SourceName = "Table Comparison", DestinationName = "Table Comparison", Comparison = "Exception", Details = ex.Message });
             }
+
             return differences;
         }
+
 
         private DataTable GetTableColumns(string connectionString, string tableName)
         {
@@ -172,7 +189,24 @@ namespace b2a.db_tula
             return row?[fieldName]?.ToString() ?? "N/A";
         }
 
-        public List<ComparisonResult> CompareFunctions(DataTable sourceFunctions, DataTable targetFunctions, SchemaFetcher sourceSchemaFetcher, SchemaFetcher targetSchemaFetcher)
+        public int GetUniqueCount(DataTable source, DataTable target, string type)
+        {
+            var sourceNames = new HashSet<string>();
+            foreach (DataRow row in source.Rows)
+            {
+                sourceNames.Add(row[type].ToString());
+            }
+
+            var targetNames = new HashSet<string>();
+            foreach (DataRow row in target.Rows)
+            {
+                targetNames.Add(row[type].ToString());
+            }
+
+            return sourceNames.Count + targetNames.Count; // Total number of tables to compare
+        }
+
+        public List<ComparisonResult> CompareFunctions(DataTable sourceFunctions, DataTable targetFunctions, SchemaFetcher sourceSchemaFetcher, SchemaFetcher targetSchemaFetcher, Action<int, int> reportProgress)
         {
             var differences = new List<ComparisonResult>();
 
@@ -187,6 +221,9 @@ namespace b2a.db_tula
             {
                 targetFunctionNames.Add(row["routine_name"].ToString());
             }
+
+            int totalFunctions = sourceFunctionNames.Count + targetFunctionNames.Count; // Total number of tables to compare
+            int currentFunctionIndex = 0; // To track the progress
 
             foreach (var function in sourceFunctionNames)
             {
@@ -205,6 +242,10 @@ namespace b2a.db_tula
                     SourceDefinition = sourceDefinition,
                     DestinationDefinition = targetDefinition});
                 }
+
+                // Increment progress and report it
+                currentFunctionIndex++;
+                reportProgress?.Invoke(currentFunctionIndex, totalFunctions); // Invoke the progress callback
             }
 
             foreach (var function in targetFunctionNames)
@@ -212,13 +253,17 @@ namespace b2a.db_tula
                 if (!sourceFunctionNames.Contains(function))
                 {
                     differences.Add(new ComparisonResult { Type = "Function", SourceName = function, DestinationName = function, Comparison = "Missing in Source" });
+
                 }
+                // Increment progress and report it
+                currentFunctionIndex++;
+                reportProgress?.Invoke(currentFunctionIndex, totalFunctions); // Invoke the progress callback
             }
 
             return differences;
         }
 
-        public List<ComparisonResult> CompareProcedures(DataTable sourceProcedures, DataTable targetProcedures, SchemaFetcher sourceSchemaFetcher, SchemaFetcher targetSchemaFetcher)
+        public List<ComparisonResult> CompareProcedures(DataTable sourceProcedures, DataTable targetProcedures, SchemaFetcher sourceSchemaFetcher, SchemaFetcher targetSchemaFetcher,Action<int, int> reportProgress)
         {
             var differences = new List<ComparisonResult>();
 
@@ -234,6 +279,9 @@ namespace b2a.db_tula
                 targetProcedureNames.Add(row["routine_name"].ToString());
             }
 
+            int totalProcedures = sourceProcedureNames.Count + targetProcedureNames.Count; // Total number of tables to compare
+            int currentProcedureIndex = 0; // To track the progress
+
             foreach (var procedure in sourceProcedureNames)
             {
                 if (!targetProcedureNames.Contains(procedure))
@@ -247,6 +295,9 @@ namespace b2a.db_tula
                     bool isMatch = sourceDefinition == targetDefinition;
                     differences.Add(new ComparisonResult { Type = "Procedure", SourceName = procedure, DestinationName = procedure, Comparison = isMatch ? "Matching" : "Not Matching" });
                 }
+                // Increment progress and report it
+                currentProcedureIndex++;
+                reportProgress?.Invoke(currentProcedureIndex, totalProcedures); // Invoke the progress callback
             }
 
             foreach (var procedure in targetProcedureNames)
@@ -255,6 +306,8 @@ namespace b2a.db_tula
                 {
                     differences.Add(new ComparisonResult { Type = "Procedure", SourceName = procedure, DestinationName = procedure, Comparison = "Missing in Source" });
                 }
+                currentProcedureIndex++;
+                reportProgress?.Invoke(currentProcedureIndex, totalProcedures); // Invoke the progress callback
             }
 
             return differences;
@@ -338,6 +391,49 @@ namespace b2a.db_tula
 
             return differences;
         }
+
+        public List<string> GenerateSyncCommands(TableDefinition sourceTable, TableDefinition targetTable)
+        {
+            var commands = new List<string>();
+
+            // Compare columns
+            foreach (var sourceColumn in sourceTable.Columns)
+            {
+                var targetColumn = targetTable.Columns.FirstOrDefault(c => c.Name == sourceColumn.Name);
+
+                if (targetColumn == null)
+                {
+                    // Column does not exist in target, generate ADD COLUMN command
+                    commands.Add($"ALTER TABLE {targetTable.Name} ADD COLUMN {sourceColumn.Name} {sourceColumn.DataType};");
+                }
+                else if (sourceColumn.DataType != targetColumn.DataType)
+                {
+                    // Data type mismatch, generate ALTER COLUMN command
+                    commands.Add($"ALTER TABLE {targetTable.Name} ALTER COLUMN {sourceColumn.Name} TYPE {sourceColumn.DataType};");
+                }
+            }
+
+            // Compare primary keys
+            if (!sourceTable.PrimaryKeys.SequenceEqual(targetTable.PrimaryKeys))
+            {
+                commands.Add($"ALTER TABLE {targetTable.Name} DROP CONSTRAINT IF EXISTS {targetTable.Name}_pkey;");
+                commands.Add($"ALTER TABLE {targetTable.Name} ADD PRIMARY KEY ({string.Join(",", sourceTable.PrimaryKeys)});");
+            }
+
+            // Compare foreign keys
+            foreach (var sourceFk in sourceTable.ForeignKeys)
+            {
+                var targetFk = targetTable.ForeignKeys.FirstOrDefault(fk => fk.Name == sourceFk.Name);
+                if (targetFk == null)
+                {
+                    commands.Add($"ALTER TABLE {targetTable.Name} ADD CONSTRAINT {sourceFk.Name} FOREIGN KEY ({sourceFk.ColumnName}) REFERENCES {sourceFk.ReferencedTable}({sourceFk.ReferencedColumn});");
+                }
+            }
+
+            return commands;
+        }
+
+
     }
 
     public class ComparisonResult

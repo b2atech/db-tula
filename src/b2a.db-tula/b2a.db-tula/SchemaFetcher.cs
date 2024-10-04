@@ -1,4 +1,5 @@
-﻿using System;
+﻿using b2a.db_tula.Models;
+using System;
 using System.Data;
 
 namespace b2a.db_tula
@@ -94,6 +95,78 @@ namespace b2a.db_tula
             _log($"Query: {query}");
             _log($"Rows returned: {result.Rows.Count}");
             return result;
+        }
+
+        public List<ColumnDefinition> GetColumnsList(string tableName)
+        {
+            var columnList = new List<ColumnDefinition>();
+            var columnDataTable = GetColumns(tableName);
+
+            foreach (DataRow row in columnDataTable.Rows)
+            {
+                columnList.Add(new ColumnDefinition
+                {
+                    Name = row["column_name"].ToString(),
+                    DataType = row["data_type"].ToString()
+                });
+            }
+
+            return columnList;
+        }
+
+        public List<string> GetPrimaryKeysList(string tableName)
+        {
+            var primaryKeyList = new List<string>();
+            var primaryKeyDataTable = GetPrimaryKeys(tableName);
+
+            foreach (DataRow row in primaryKeyDataTable.Rows)
+            {
+                primaryKeyList.Add(row["column_name"].ToString());
+            }
+
+            return primaryKeyList;
+        }
+
+        public List<ForeignKeyDefinition> GetForeignKeysList(string tableName)
+        {
+            var foreignKeyList = new List<ForeignKeyDefinition>();
+            var foreignKeyDataTable = GetForeignKeys(tableName);
+
+            foreach (DataRow row in foreignKeyDataTable.Rows)
+            {
+                foreignKeyList.Add(new ForeignKeyDefinition
+                {
+                    Name = row["ForeignKeyName"].ToString(), // Assign the foreign key name
+                    ColumnName = row["ColumnName"].ToString(),
+                    ReferencedTable = row["ReferencedTable"].ToString(),
+                    ReferencedColumn = row["ReferencedColumn"].ToString()
+                });
+            }
+
+            return foreignKeyList;
+        }
+
+        public TableDefinition GetTableDefinition(string tableName)
+        {
+            var tableDefinition = new TableDefinition
+            {
+                Name = tableName,
+                Columns = GetColumnsList(tableName), // Convert columns to List<ColumnDefinition>
+                PrimaryKeys = GetPrimaryKeysList(tableName), // Convert primary keys to List<string>
+                ForeignKeys = GetForeignKeysList(tableName) // Convert foreign keys to List<ForeignKeyDefinition>
+            };
+
+            return tableDefinition;
+        }
+
+       
+
+       
+        public string GetFunctionOrProcedureDefinition(string objectName)
+        {
+            string query = $"SELECT pg_get_functiondef(oid) AS definition FROM pg_proc WHERE proname = '{objectName}'";
+            var result = ExecuteQueryWithDebug(query);
+            return result.Rows.Count > 0 ? result.Rows[0]["definition"].ToString() : null;
         }
     }
 }

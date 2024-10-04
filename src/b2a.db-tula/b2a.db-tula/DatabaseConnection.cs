@@ -41,5 +41,17 @@ namespace b2a.db_tula
                 return new DataTable();
             }
         }
+
+        public void ExecuteCommand(string sqlCommand)
+        {
+            using (var connection = new NpgsqlConnection(_connectionString))
+            {
+                connection.Open();
+                using (var command = new NpgsqlCommand(sqlCommand, connection))
+                {
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
     }
 }

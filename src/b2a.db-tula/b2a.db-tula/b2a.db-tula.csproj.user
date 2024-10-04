@@ -12,12 +12,24 @@
     <Compile Update="AddNewComparer.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Update="SecretDialog.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Update="SyncPreviewWindow.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Page Update="AddNewComparer.xaml">
       <SubType>Designer</SubType>
     </Page>
     <Page Update="MainWindow.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="SecretDialog.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="SyncPreviewWindow.xaml">
       <SubType>Designer</SubType>
     </Page>
   </ItemGroup>
