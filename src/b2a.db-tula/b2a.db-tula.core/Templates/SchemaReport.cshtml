@@ -1,0 +1,173 @@
+﻿@using b2a.db_tula.core.Models
+@model List<ComparisonResult>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Schema Comparison Report</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.0/styles/default.min.css" rel="stylesheet" />
+    <style>
+        .mismatch {
+            background-color: #fff3cd;
+        }
+
+        .missing {
+            background-color: #f8d7da;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            z-index: 2;
+        }
+
+        .code-block {
+            position: relative;
+        }
+    </style>
+</head>
+<body class="container my-4">
+    <h1>Schema Comparison Report</h1>
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="mismatchOnly" onchange="applyFilters()">
+                <label class="form-check-label" for="mismatchOnly">Show only mismatches</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="missingSourceOnly" onchange="applyFilters()">
+                <label class="form-check-label" for="missingSourceOnly">Missing in source</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="missingTargetOnly" onchange="applyFilters()">
+                <label class="form-check-label" for="missingTargetOnly">Missing in target</label>
+            </div>
+        </div>
+        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#syncScriptModal">
+            Show All Sync Scripts
+        </button>
+    </div>
+
+    <table class="table table-bordered table-striped">
+        <thead class="table-light">
+            <tr>
+                <th>Type</th>
+                <th>Name</th>
+                <th>Source</th>
+                <th>Destination</th>
+                <th>Comparison</th>
+                <th>Definition</th>
+            </tr>
+        </thead>
+        <tbody>
+            @{
+                var idCounter = 0;
+                var allSyncScripts = new System.Text.StringBuilder();
+            }
+            @foreach (var item in Model)
+            {
+                var rowClass = item.Comparison switch
+                {
+                    "Matching" => "",
+                    "Not Matching" => "mismatch",
+                    "Missing in Target" or "Missing in Source" => "missing",
+                    _ => ""
+                };
+
+                var sourceState = item.Comparison == "Missing in Source" ? "Missing" : "Present";
+                var targetState = item.Comparison == "Missing in Target" ? "Missing" : "Present";
+                if (item.Comparison == "Matching" || item.Comparison == "Not Matching")
+                {
+                    sourceState = "Present";
+                    targetState = "Present";
+                }
+
+                <tr class="@rowClass" data-comparison="@item.Comparison">
+                    <td>@item.Type</td>
+                    <td>@(item.SourceName ?? item.DestinationName)</td>
+                    <td>@sourceState</td>
+                    <td>@targetState</td>
+                    <td>@item.Comparison</td>
+                    <td>
+                        @if (!string.IsNullOrWhiteSpace(item.SourceDefinition) || !string.IsNullOrWhiteSpace(item.DestinationDefinition))
+                        {
+                            var defId = $"code-block-{idCounter++}";
+                            <details>
+                                <summary>View</summary>
+                                <div class="code-block">
+                                    <button class="btn btn-sm btn-outline-secondary copy-btn" onclick="copyToClipboard('@defId')">Copy</button>
+                                    <pre><code class="language-sql" id="@defId">
+                                            @item.SourceDefinition
+                                            @item.DestinationDefinition</code></pre>
+                                </div>
+                            </details>
+                        }
+                    </td>
+                </tr>
+
+                if (!string.IsNullOrWhiteSpace(item.SyncScript))
+                {
+                    allSyncScripts.AppendLine($"-- {item.Type}: {item.SourceName ?? item.DestinationName}");
+                    allSyncScripts.AppendLine(item.SyncScript.Trim());
+                    allSyncScripts.AppendLine();
+                }
+            }
+        </tbody>
+    </table>
+
+    @if (allSyncScripts.Length > 0)
+    {
+        var scriptBlockId = "sync-all-script";
+        <div class="modal fade" id="syncScriptModal" tabindex="-1" aria-labelledby="syncScriptModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="syncScriptModalLabel">All Sync Scripts</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="code-block">
+                            <button class="btn btn-sm btn-primary copy-btn" onclick="copyToClipboard('@scriptBlockId')">Copy All</button>
+                            <pre>
+                            <code class="language-sql" id="@scriptBlockId">@allSyncScripts.ToString()</code>
+
+                            </pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.0/highlight.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            hljs.highlightAll();
+        });
+
+        function applyFilters() {
+            const mismatch = document.getElementById('mismatchOnly').checked;
+            const missingSource = document.getElementById('missingSourceOnly').checked;
+            const missingTarget = document.getElementById('missingTargetOnly').checked;
+            document.querySelectorAll('table tbody tr[data-comparison]').forEach(row => {
+                const comparison = row.dataset.comparison;
+                let show = true;
+                if (mismatch && comparison === 'Matching') show = false;
+                if (missingSource && comparison !== 'Missing in Source') show = false;
+                if (missingTarget && comparison !== 'Missing in Target') show = false;
+                row.style.display = show ? '' : 'none';
+            });
+        }
+
+        function copyToClipboard(id) {
+            const el = document.getElementById(id);
+            navigator.clipboard.writeText(el.innerText).then(() => alert('Copied to clipboard'));
+        }
+    </script>
+</body>
+</html>

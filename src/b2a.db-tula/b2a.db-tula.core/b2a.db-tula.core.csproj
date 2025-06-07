@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>b2a.db_tula.core</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Update="Templates\SchemaReport.cshtml">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="9.0.3" />
+    <PackageReference Include="RazorLight" Version="2.3.1" />
+  </ItemGroup>
+
+</Project>
