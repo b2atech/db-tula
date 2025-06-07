@@ -49,7 +49,7 @@ jobs:
             dotnet run --project src/b2a.db-tula/b2a.db-tula.cli/b2a.db-tula.cli.csproj --configuration Release -- \
               --source "$SOURCE_CONN" \
               --target "$TARGET_CONN" \
-              --output "gh-pages/${service}.html"
+              --out "gh-pages/${service}.html"
 
             cp schema-comparison-report.html "gh-pages/${service}.html"
           done
