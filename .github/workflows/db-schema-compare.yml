@@ -51,8 +51,6 @@ jobs:
               --source "$SOURCE_CONN" \
               --target "$TARGET_CONN" \
               --out "gh-pages/${service}.html"
-
-            cp schema-comparison-report.html "gh-pages/${service}.html"
           done
 
       - name: Deploy Schema Reports to OVH (without index.html)
