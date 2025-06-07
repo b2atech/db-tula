@@ -1,8 +1,7 @@
 {
   "profiles": {
     "b2a.db-tula.cli": {
-      "commandName": "Project",
-      "commandLineArgs": "--source \"Server=db.prod.dhanman.com;Port=5432;Database=prod-dhanman-common;User Id=dhanmanprod;Password=AVNS_zHaNPqCYjmxH4NjDHnj;\" --target \"Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;\" --out \"./test-output.sql\""
+      "commandName": "Project"
     }
   }
 }
