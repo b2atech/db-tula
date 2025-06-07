@@ -1,0 +1,36 @@
+name: DB Schema Comparison
+
+on:
+  workflow_dispatch: # Trigger manually for now
+
+jobs:
+  compare-schemas:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore Dependencies
+        run: dotnet restore src/b2a.db-tula/b2a.db-tula.cli/b2a.db-tula.cli.csproj
+
+      - name: Build CLI Tool
+        run: dotnet build src/b2a.db-tula/b2a.db-tula.cli/b2a.db-tula.cli.csproj --configuration Release
+
+      - name: Run Schema Comparison
+        run: |
+          dotnet run --project src/b2a.db-tula/b2a.db-tula.cli/b2a.db-tula.cli.csproj --configuration Release -- \
+            --source "${{ secrets.SOURCE_COMMON_DB_CONNECTION }}" \
+            --target "${{ secrets.TARGET_COMMON_DB_CONNECTION }}" \
+            --verbose
+
+      - name: Upload HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: Schema Sync Report
+          path: schema-comparison-report.html
