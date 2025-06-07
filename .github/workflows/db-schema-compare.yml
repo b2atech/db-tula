@@ -7,6 +7,19 @@ jobs:
   compare-schemas:
     runs-on: ubuntu-latest
 
+    env:
+      # Source (QA)
+      QA_DB_HOST: ${{ secrets.QA_DB_HOST }}
+      QA_DB_PORT: ${{ secrets.QA_DB_PORT }}
+      QA_DB_USER: ${{ secrets.QA_DB_USER }}
+      QA_DB_PASSWORD: ${{ secrets.QA_DB_PASSWORD }}
+
+      # Target (PROD)
+      PROD_DB_HOST: ${{ secrets.PROD_DB_HOST }}
+      PROD_DB_PORT: ${{ secrets.PROD_DB_PORT }}
+      PROD_DB_USER: ${{ secrets.PROD_DB_USER }}
+      PROD_DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
+
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
@@ -22,20 +35,40 @@ jobs:
       - name: Build CLI Tool
         run: dotnet build src/b2a.db-tula/b2a.db-tula.cli/b2a.db-tula.cli.csproj --configuration Release
 
-      - name: Run Schema Comparison
+      - name: Run Schema Comparison for All DBs
         run: |
-          dotnet run --project src/b2a.db-tula/b2a.db-tula.cli/b2a.db-tula.cli.csproj --configuration Release -- \
-            --source "${{ secrets.SOURCE_COMMON_DB_CONNECTION }}" \
-            --target "${{ secrets.TARGET_COMMON_DB_CONNECTION }}"
+          services=("common" "community" "inventory" "payroll" "purchase" "sales")
+          mkdir -p gh-pages
 
-      - name: Prepare GitHub Pages folder
-        run: |
-          mkdir gh-pages
-          cp schema-comparison-report.html gh-pages/index.html
+          for service in "${services[@]}"; do
+            echo "Comparing $service..."
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+            SOURCE_CONN="Server=${QA_DB_HOST};Port=${QA_DB_PORT};Database=qa-dhanman-${service};User Id=${QA_DB_USER};Password=${QA_DB_PASSWORD};"
+            TARGET_CONN="Server=${PROD_DB_HOST};Port=${PROD_DB_PORT};Database=prod-dhanman-${service};User Id=${PROD_DB_USER};Password=${PROD_DB_PASSWORD};"
+
+            dotnet run --project src/b2a.db-tula/b2a.db-tula.cli/b2a.db-tula.cli.csproj --configuration Release -- \
+              --source "$SOURCE_CONN" \
+              --target "$TARGET_CONN"
+
+            cp schema-comparison-report.html "gh-pages/${service}.html"
+          done
+
+      - name: Deploy Schema Reports to OVH (without index.html)
+        uses: appleboy/scp-action@v0.1.4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./gh-pages
-
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          password: ${{ secrets.DO_PASSWORD }}
+          port: 22
+          source: |
+            gh-pages/common.html
+            gh-pages/community.html
+            gh-pages/inventory.html
+            gh-pages/payroll.html
+            gh-pages/purchase.html
+            gh-pages/sales.html
+          target: "/var/www/dbtula-site"
+          strip_components: 1
+          timeout: 30s
+          command_timeout: 10m
+          debug: true
