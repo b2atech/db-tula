@@ -60,13 +60,7 @@ jobs:
           username: ${{ secrets.DO_USER }}
           password: ${{ secrets.DO_PASSWORD }}
           port: 22
-          source: |
-            gh-pages/common.html
-            gh-pages/community.html
-            gh-pages/inventory.html
-            gh-pages/payroll.html
-            gh-pages/purchase.html
-            gh-pages/sales.html
+          source: "gh-pages/inventory.html"
           target: "/var/www/dbtula-site"
           strip_components: 1
           timeout: 30s
