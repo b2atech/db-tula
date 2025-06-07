@@ -28,8 +28,14 @@ jobs:
             --source "${{ secrets.SOURCE_COMMON_DB_CONNECTION }}" \
             --target "${{ secrets.TARGET_COMMON_DB_CONNECTION }}"
 
-      - name: Upload HTML Report
-        uses: actions/upload-artifact@v4
+      - name: Prepare GitHub Pages folder
+        run: |
+          mkdir gh-pages
+          cp schema-comparison-report.html gh-pages/index.html
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          name: Schema Sync Report
-          path: schema-comparison-report.html
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./gh-pages
+
