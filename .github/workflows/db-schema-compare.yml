@@ -26,8 +26,7 @@ jobs:
         run: |
           dotnet run --project src/b2a.db-tula/b2a.db-tula.cli/b2a.db-tula.cli.csproj --configuration Release -- \
             --source "${{ secrets.SOURCE_COMMON_DB_CONNECTION }}" \
-            --target "${{ secrets.TARGET_COMMON_DB_CONNECTION }}" \
-            --verbose
+            --target "${{ secrets.TARGET_COMMON_DB_CONNECTION }}"
 
       - name: Upload HTML Report
         uses: actions/upload-artifact@v4
