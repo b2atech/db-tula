@@ -41,8 +41,8 @@ namespace b2a.db_tula.runner
                     if (level <= LogLevel.Basic) Console.WriteLine(msg);
                 });
                 //var report = HtmlReportGenerator.LoadFromJson("schema-comparison.json");
-                HtmlReportGenerator.SaveAsJson(report, "schema-comparison.json");
-                await HtmlReportGenerator.GenerateWithRazorAsync(report.AllResults(), "schema-comparison-report.html");
+                HtmlReportGenerator.SaveAsJson(report, Path.ChangeExtension(options.OutputFile, ".json"));
+                await HtmlReportGenerator.GenerateWithRazorAsync(report.AllResults(), options.OutputFile);
                 return 0;
             }
             catch (Exception ex)

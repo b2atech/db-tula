@@ -228,6 +228,7 @@ namespace b2a.db_tula.core
                 Name = tableName,
                 Columns = GetColumnsList(tableName),
                 PrimaryKeys = GetPrimaryKeysList(tableName),
+                PrimaryKeyColumns = GetPrimaryKeysList(tableName),
                 ForeignKeys = GetForeignKeysList(tableName),
                 CreateScript = GetCreateTableScript(tableName) // ✅ Add this
 

@@ -10,7 +10,7 @@ namespace b2a.db_tula.cli
     {
         public string SourceConnectionString { get; set; }
         public string TargetConnectionString { get; set; }
-        public string OutputFile { get; set; } = "schema-sync.sql";
+        public string OutputFile { get; set; } = "schema-sync.html";
 
         public bool IsValid =>
             !string.IsNullOrWhiteSpace(SourceConnectionString) &&

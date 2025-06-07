@@ -200,12 +200,12 @@ namespace b2a.db_tula.core
                     commands.Add($"ALTER TABLE \"{target.Name}\" ALTER COLUMN \"{srcCol.Name}\" TYPE {srcCol.DataType};");
                 }
             }
+            bool sameKeyColumns = source.PrimaryKeyColumns.SequenceEqual(target.PrimaryKeyColumns, StringComparer.OrdinalIgnoreCase);
 
-            if (!source.PrimaryKeys.SequenceEqual(target.PrimaryKeys))
+            if (!sameKeyColumns)
             {
                 commands.Add($"ALTER TABLE \"{target.Name}\" DROP CONSTRAINT IF EXISTS \"{target.Name}_pkey\";");
-                commands.Add($"ALTER TABLE \"{target.Name}\" ADD PRIMARY KEY ({string.Join(", ", source.PrimaryKeys.Select(pk => $"\"{pk}\""))});");
-
+                commands.Add($"ALTER TABLE \"{target.Name}\" ADD PRIMARY KEY ({string.Join(", ", source.PrimaryKeyColumns.Select(pk => $"\"{pk}\""))});");
             }
 
             foreach (var fk in source.ForeignKeys)

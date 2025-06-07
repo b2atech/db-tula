@@ -11,6 +11,7 @@ namespace b2a.db_tula.core.Models
         public string Name { get; set; }
         public List<ColumnDefinition> Columns { get; set; }
         public List<string> PrimaryKeys { get; set; }
+        public List<string> PrimaryKeyColumns { get; set; } = new();
         public List<ForeignKeyDefinition> ForeignKeys { get; set; }
         public string? CreateScript { get; set; }
     }
