@@ -37,8 +37,8 @@ jobs:
 
       - name: Run Schema Comparison for All DBs
         run: |
-          # services=("common" "community" "inventory" "payroll" "purchase" "sales")
-          services=("inventory")
+          services=("common" "community" "inventory" "payroll" "purchase" "sales")
+          # services=("inventory")
           mkdir -p gh-pages
 
           for service in "${services[@]}"; do
@@ -60,7 +60,7 @@ jobs:
           username: ${{ secrets.DO_USER }}
           password: ${{ secrets.DO_PASSWORD }}
           port: 22
-          source: "gh-pages/inventory.html"
+          source: "gh-pages/*.html"
           target: "/var/www/dbtula-site"
           strip_components: 1
           timeout: 30s
