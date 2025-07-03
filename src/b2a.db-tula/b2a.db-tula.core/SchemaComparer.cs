@@ -3,14 +3,114 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace b2a.db_tula.core
 {
     public class SchemaComparer
     {
-        public List<ComparisonResult> CompareTables(SchemaFetcher sourceFetcher, SchemaFetcher targetFetcher, DataTable sourceTables, DataTable targetTables, Action<int, int, string> progressLogger)
+        //public List<ComparisonResult> CompareTables(SchemaFetcher sourceFetcher, SchemaFetcher targetFetcher, DataTable sourceTables, DataTable targetTables, Action<int, int, string> progressLogger)
+        //{
+        //    var differences = new List<ComparisonResult>();
+
+        //    var sourceNames = sourceTables.Rows.Cast<DataRow>().Select(r => r["table_name"].ToString()).ToHashSet();
+        //    var targetNames = targetTables.Rows.Cast<DataRow>().Select(r => r["table_name"].ToString()).ToHashSet();
+        //    int total = sourceNames.Count + targetNames.Count;
+        //    int index = 0;
+
+        //    foreach (var name in sourceNames)
+        //    {
+        //        if (!targetNames.Contains(name))
+        //        {
+        //            differences.Add(new ComparisonResult
+        //            {
+        //                Type = "Table",
+        //                SourceName = name,
+        //                Comparison = ComparisonType.MissingInTarget
+        //            });
+        //        }
+        //        else
+        //        {
+        //            var src = sourceFetcher.GetTableDefinition(name);
+        //            var tgt = targetFetcher.GetTableDefinition(name);
+        //            var result = new ComparisonResult
+        //            {
+        //                Type = "Table",
+        //                SourceName = name,
+        //                DestinationName = name,
+        //                Comparison = ComparisonType.Same
+        //            };
+
+        //            foreach (var col in src.Columns)
+        //            {
+        //                var tgtCol = tgt.Columns.FirstOrDefault(c => c.Name == col.Name);
+        //                if (tgtCol == null)
+        //                {
+        //                    result.ColumnComparisonResults.Add(new ColumnComparisonResult
+        //                    {
+        //                        SourceName = col.Name,
+        //                        Comparison = ComparisonType.MissingInTarget
+        //                    });
+        //                    result.Comparison = ComparisonType.Changed;
+        //                }
+        //                else if (col.DataType != tgtCol.DataType)
+        //                {
+        //                    result.ColumnComparisonResults.Add(new ColumnComparisonResult
+        //                    {
+        //                        SourceName = col.Name,
+        //                        SourceType = col.DataType,
+        //                        DestinationType = tgtCol.DataType,
+        //                        Comparison = ComparisonType.Changed
+        //                    });
+        //                    result.Comparison = ComparisonType.Changed;
+        //                }
+        //            }
+
+        //            foreach (var col in tgt.Columns)
+        //            {
+        //                if (!src.Columns.Any(c => c.Name == col.Name))
+        //                {
+        //                    result.ColumnComparisonResults.Add(new ColumnComparisonResult
+        //                    {
+        //                        DestinationName = col.Name,
+        //                        Comparison = ComparisonType.MissingInSource
+        //                    });
+        //                    result.Comparison = ComparisonType.Changed;
+        //                }
+        //            }
+
+        //            differences.Add(result);
+        //        }
+
+        //        index++;
+        //        progressLogger?.Invoke(index, total, name);
+        //    }
+
+        //    foreach (var name in targetNames)
+        //    {
+        //        if (!sourceNames.Contains(name))
+        //        {
+        //            differences.Add(new ComparisonResult
+        //            {
+        //                Type = "Table",
+        //                DestinationName = name,
+        //                Comparison = ComparisonType.MissingInSource
+        //            });
+        //        }
+        //        index++;
+        //        progressLogger?.Invoke(index, total, name);
+        //    }
+
+        //    return differences;
+        //}
+
+
+        public async Task<List<ComparisonResult>> CompareTablesAsync(
+    SchemaFetcher sourceFetcher,
+    SchemaFetcher targetFetcher,
+    DataTable sourceTables,
+    DataTable targetTables,
+    Action<int, int, string> progressLogger)
         {
             var differences = new List<ComparisonResult>();
 
@@ -21,57 +121,136 @@ namespace b2a.db_tula.core
 
             foreach (var name in sourceNames)
             {
+                var src = await sourceFetcher.GetTableDefinitionAsync(name);
+                var tgt = await targetFetcher.GetTableDefinitionAsync(name);
+
                 if (!targetNames.Contains(name))
                 {
-                    differences.Add(new ComparisonResult { Type = "Table", SourceName = name, Comparison = "Missing in Target" });
+                    var result = CreateMissingInTargetResult(name);
+                    differences.Add(result);
+                    result.SourceDefinition = src;
+                    result.DestinationDefinition = tgt; 
                 }
                 else
                 {
-                    var src = sourceFetcher.GetTableDefinition(name);
-                    var tgt = targetFetcher.GetTableDefinition(name);
-                    var result = new ComparisonResult { Type = "Table", SourceName = name, DestinationName = name, Comparison = "Matching" };
-
-                    foreach (var col in src.Columns)
-                    {
-                        var tgtCol = tgt.Columns.FirstOrDefault(c => c.Name == col.Name);
-                        if (tgtCol == null)
-                        {
-                            result.ColumnComparisonResults.Add(new ColumnComparisonResult { SourceName = col.Name, Comparison = "Missing in Target" });
-                            result.Comparison = "Not Matching";
-                        }
-                        else if (col.DataType != tgtCol.DataType)
-                        {
-                            result.ColumnComparisonResults.Add(new ColumnComparisonResult { SourceName = col.Name, SourceType = col.DataType, DestinationType = tgtCol.DataType, Comparison = "Type Mismatch" });
-                            result.Comparison = "Not Matching";
-                        }
-                    }
-
-                    foreach (var col in tgt.Columns)
-                    {
-                        if (!src.Columns.Any(c => c.Name == col.Name))
-                        {
-                            result.ColumnComparisonResults.Add(new ColumnComparisonResult { DestinationName = col.Name, Comparison = "Missing in Source" });
-                            result.Comparison = "Not Matching";
-                        }
-                    }
-
+                    var result = CompareTableStructure(name, src, tgt, sourceFetcher, targetFetcher);
                     differences.Add(result);
+                    result.SourceDefinition = src;
+                    result.DestinationDefinition = tgt;
                 }
+
                 index++;
                 progressLogger?.Invoke(index, total, name);
             }
 
-            foreach (var name in targetNames)
+            foreach (var name in targetNames.Except(sourceNames))
             {
-                if (!sourceNames.Contains(name))
-                {
-                    differences.Add(new ComparisonResult { Type = "Table", DestinationName = name, Comparison = "Missing in Source" });
-                }
+                differences.Add(CreateMissingInSourceResult(name));
                 index++;
                 progressLogger?.Invoke(index, total, name);
             }
 
             return differences;
+        }
+
+        private ComparisonResult CreateMissingInTargetResult(string name) => new()
+        {
+            Type = "Table",
+            SourceName = name,
+            Comparison = ComparisonType.MissingInTarget
+        };
+
+        private ComparisonResult CreateMissingInSourceResult(string name) => new()
+        {
+            Type = "Table",
+            DestinationName = name,
+            Comparison = ComparisonType.MissingInSource
+        };
+
+
+        private ComparisonResult CompareTableStructure(
+            string tableName,
+            TableDefinition src,
+            TableDefinition tgt,
+            SchemaFetcher sourceFetcher,
+            SchemaFetcher targetFetcher)
+        {
+            var result = new ComparisonResult
+            {
+                Type = "Table",
+                SourceName = tableName,
+                DestinationName = tableName,
+                Comparison = ComparisonType.Same
+            };
+
+            CompareColumns(src, tgt, result);
+            result.PrimaryKeyComparisonResults = ComparePrimaryKeys(src, tgt, result);
+            result.ForeignKeyComparisonResults = CompareForeignKeys(src, tgt, result);
+
+
+            var srcIndexes = ParseIndexes(sourceFetcher.GetIndexesAsync(src.Name).GetAwaiter().GetResult());
+            var tgtIndexes = ParseIndexes(targetFetcher.GetIndexesAsync(tgt.Name).GetAwaiter().GetResult());
+
+            result.IndexComparisonResults = CompareIndexesByDefinition(srcIndexes, tgtIndexes, result);
+
+
+            return result;
+        }
+
+        private List<IndexDefinition> ParseIndexes(DataTable table)
+        {
+            return table.AsEnumerable()
+                .GroupBy(r => r["indexname"].ToString())
+                .Select(g => new IndexDefinition
+                {
+                    IndexName = g.Key,
+                    TableName = g.First()["tablename"].ToString(),
+                    IsUnique = Convert.ToBoolean(g.First()["is_unique"]),
+                    IndexType = g.First()["index_type"].ToString(),
+                    Columns = g.Select(r => r["columnname"].ToString()).ToList()
+                })
+                .ToList();
+        }
+
+        private void CompareColumns(TableDefinition src, TableDefinition tgt, ComparisonResult result)
+        {
+            foreach (var col in src.Columns)
+            {
+                var tgtCol = tgt.Columns.FirstOrDefault(c => c.Name == col.Name);
+                if (tgtCol == null)
+                {
+                    result.ColumnComparisonResults.Add(new ColumnComparisonResult
+                    {
+                        SourceName = col.Name,
+                        Comparison = ComparisonType.MissingInTarget
+                    });
+                    result.Comparison = ComparisonType.Changed;
+                }
+                else if (col.DataType != tgtCol.DataType)
+                {
+                    result.ColumnComparisonResults.Add(new ColumnComparisonResult
+                    {
+                        SourceName = col.Name,
+                        SourceType = col.DataType,
+                        DestinationType = tgtCol.DataType,
+                        Comparison = ComparisonType.Changed
+                    });
+                    result.Comparison = ComparisonType.Changed;
+                }
+            }
+
+            foreach (var col in tgt.Columns)
+            {
+                if (!src.Columns.Any(c => c.Name == col.Name))
+                {
+                    result.ColumnComparisonResults.Add(new ColumnComparisonResult
+                    {
+                        DestinationName = col.Name,
+                        Comparison = ComparisonType.MissingInSource
+                    });
+                    result.Comparison = ComparisonType.Changed;
+                }
+            }
         }
 
         public List<ComparisonResult> CompareFunctions(SchemaFetcher sourceFetcher, SchemaFetcher targetFetcher, DataTable source, DataTable target, Action<int, int, string> progressLogger)
@@ -96,15 +275,30 @@ namespace b2a.db_tula.core
             {
                 if (!targetNames.Contains(name))
                 {
-                    differences.Add(new ComparisonResult { Type = type, SourceName = name, Comparison = "Missing in Target" });
+                    differences.Add(new ComparisonResult
+                    {
+                        Type = type,
+                        SourceName = name,
+                        Comparison = ComparisonType.MissingInTarget
+                    });
                 }
                 else
                 {
                     var src = sourceFetcher.GetFunctionOrProcedureDefinitionAsync(name).GetAwaiter().GetResult();
                     var tgt = targetFetcher.GetFunctionOrProcedureDefinitionAsync(name).GetAwaiter().GetResult();
                     var match = NormalizedDefinition.Normalize(src) == NormalizedDefinition.Normalize(tgt);
-                    differences.Add(new ComparisonResult { Type = type, SourceName = name, DestinationName = name, Comparison = match ? "Matching" : "Not Matching", SourceDefinition = src, DestinationDefinition = tgt });
+
+                    differences.Add(new ComparisonResult
+                    {
+                        Type = type,
+                        SourceName = name,
+                        DestinationName = name,
+                        SourceFuncOrProcDefinition = src,
+                        DestinationFuncOrProcDefinition = tgt,
+                        Comparison = match ? ComparisonType.Same : ComparisonType.Changed
+                    });
                 }
+
                 index++;
                 progressLogger?.Invoke(index, total, name);
             }
@@ -113,7 +307,12 @@ namespace b2a.db_tula.core
             {
                 if (!sourceNames.Contains(name))
                 {
-                    differences.Add(new ComparisonResult { Type = type, DestinationName = name, Comparison = "Missing in Source" });
+                    differences.Add(new ComparisonResult
+                    {
+                        Type = type,
+                        DestinationName = name,
+                        Comparison = ComparisonType.MissingInSource
+                    });
                 }
                 index++;
                 progressLogger?.Invoke(index, total, name);
@@ -122,7 +321,7 @@ namespace b2a.db_tula.core
             return differences;
         }
 
-        public List<KeyComparisonResult> ComparePrimaryKeys(TableDefinition source, TableDefinition target)
+        public List<KeyComparisonResult> ComparePrimaryKeys(TableDefinition source,TableDefinition target, ComparisonResult result)
         {
             var results = new List<KeyComparisonResult>();
             var srcKeys = source.PrimaryKeys.ToHashSet();
@@ -131,20 +330,43 @@ namespace b2a.db_tula.core
             foreach (var key in srcKeys)
             {
                 if (!tgtKeys.Contains(key))
-                    results.Add(new KeyComparisonResult { SourceName = key, Comparison = "Missing in Target" });
+                {
+                    results.Add(new KeyComparisonResult
+                    {
+                        SourceName = key,
+                        Comparison = ComparisonType.MissingInTarget
+                    });
+                    result.Comparison = ComparisonType.Changed;
+                }
                 else
-                    results.Add(new KeyComparisonResult { SourceName = key, DestinationName = key, Comparison = "Matching" });
+                {
+                    results.Add(new KeyComparisonResult
+                    {
+                        SourceName = key,
+                        DestinationName = key,
+                        Comparison = ComparisonType.Same
+                    });
+                }
             }
 
             foreach (var key in tgtKeys.Except(srcKeys))
             {
-                results.Add(new KeyComparisonResult { DestinationName = key, Comparison = "Missing in Source" });
+                results.Add(new KeyComparisonResult
+                {
+                    DestinationName = key,
+                    Comparison = ComparisonType.MissingInSource
+                });
+                result.Comparison = ComparisonType.Changed;
             }
 
             return results;
         }
 
-        public List<KeyComparisonResult> CompareForeignKeys(TableDefinition source, TableDefinition target)
+
+        public List<KeyComparisonResult> CompareForeignKeys(
+    TableDefinition source,
+    TableDefinition target,
+    ComparisonResult result)
         {
             var results = new List<KeyComparisonResult>();
 
@@ -155,12 +377,26 @@ namespace b2a.db_tula.core
                     t.ReferencedTable == fk.ReferencedTable &&
                     t.ReferencedColumn == fk.ReferencedColumn);
 
-                results.Add(new KeyComparisonResult
+                if (exists)
                 {
-                    SourceName = fk.Name,
-                    DestinationName = exists ? fk.Name : null,
-                    Comparison = exists ? "Matching" : "Missing in Target"
-                });
+                    results.Add(new KeyComparisonResult
+                    {
+                        SourceName = fk.Name,
+                        DestinationName = fk.Name,
+                        Comparison = ComparisonType.Same
+                    });
+                }
+                else
+                {
+                    results.Add(new KeyComparisonResult
+                    {
+                        SourceName = fk.Name,
+                        DestinationName = null,
+                        Comparison = ComparisonType.MissingInTarget
+                    });
+
+                    result.Comparison = ComparisonType.Changed;
+                }
             }
 
             foreach (var fk in target.ForeignKeys)
@@ -176,9 +412,89 @@ namespace b2a.db_tula.core
                     {
                         SourceName = null,
                         DestinationName = fk.Name,
-                        Comparison = "Missing in Source"
+                        Comparison = ComparisonType.MissingInSource
+                    });
+
+                    result.Comparison = ComparisonType.Changed;
+                }
+            }
+
+            return results;
+        }
+
+
+        public List<KeyComparisonResult> CompareIndexesByDefinition(
+     List<IndexDefinition> sourceIndexes,
+     List<IndexDefinition> targetIndexes,
+     ComparisonResult result)
+        {
+            var results = new List<KeyComparisonResult>();
+            var matchedTargetIndexes = new HashSet<string>();
+
+            foreach (var src in sourceIndexes)
+            {
+                var match = targetIndexes.FirstOrDefault(tgt =>
+                    tgt.TableName == src.TableName &&
+                    tgt.IsUnique == src.IsUnique &&
+                    tgt.IndexType == src.IndexType &&
+                    tgt.Columns.SequenceEqual(src.Columns, StringComparer.OrdinalIgnoreCase));
+
+                if (match != null)
+                {
+                    matchedTargetIndexes.Add(match.IndexName);
+                    results.Add(new KeyComparisonResult
+                    {
+                        SourceName = src.IndexName,
+                        DestinationName = match.IndexName,
+                        Comparison = ComparisonType.Same
                     });
                 }
+                else
+                {
+                    results.Add(new KeyComparisonResult
+                    {
+                        SourceName = src.IndexName,
+                        DestinationName = null,
+                        Comparison = ComparisonType.MissingInTarget
+                    });
+                    result.Comparison = ComparisonType.Changed;
+                }
+            }
+
+            foreach (var tgt in targetIndexes)
+            {
+                if (!matchedTargetIndexes.Contains(tgt.IndexName))
+                {
+                    results.Add(new KeyComparisonResult
+                    {
+                        SourceName = null,
+                        DestinationName = tgt.IndexName,
+                        Comparison = ComparisonType.ExtraInTarget
+                    });
+                    result.Comparison = ComparisonType.Changed;
+                }
+            }
+
+            return results;
+        }
+
+        public List<KeyComparisonResult> CompareSequences(List<string> sourceSequences, List<string> targetSequences)
+        {
+            var results = new List<KeyComparisonResult>();
+            var src = sourceSequences.ToHashSet();
+            var tgt = targetSequences.ToHashSet();
+
+            foreach (var s in src)
+            {
+                if (!tgt.Contains(s))
+                    results.Add(new KeyComparisonResult { SourceName = s, Comparison = ComparisonType.MissingInTarget });
+                else
+                    results.Add(new KeyComparisonResult { SourceName = s, DestinationName = s, Comparison = ComparisonType.Same });
+            }
+
+            foreach (var s in tgt.Except(src))
+            {
+                results.Add(new KeyComparisonResult { DestinationName = s, Comparison = ComparisonType.MissingInSource });
             }
 
             return results;
@@ -200,9 +516,8 @@ namespace b2a.db_tula.core
                     commands.Add($"ALTER TABLE \"{target.Name}\" ALTER COLUMN \"{srcCol.Name}\" TYPE {srcCol.DataType};");
                 }
             }
-            bool sameKeyColumns = source.PrimaryKeyColumns.SequenceEqual(target.PrimaryKeyColumns, StringComparer.OrdinalIgnoreCase);
 
-            if (!sameKeyColumns)
+            if (!source.PrimaryKeyColumns.SequenceEqual(target.PrimaryKeyColumns, StringComparer.OrdinalIgnoreCase))
             {
                 commands.Add($"ALTER TABLE \"{target.Name}\" DROP CONSTRAINT IF EXISTS \"{target.Name}_pkey\";");
                 commands.Add($"ALTER TABLE \"{target.Name}\" ADD PRIMARY KEY ({string.Join(", ", source.PrimaryKeyColumns.Select(pk => $"\"{pk}\""))});");
@@ -223,48 +538,8 @@ namespace b2a.db_tula.core
 
             return commands;
         }
-        public List<KeyComparisonResult> CompareIndexes(List<string> sourceIndexes, List<string> targetIndexes)
-        {
-            var results = new List<KeyComparisonResult>();
-            var src = sourceIndexes.ToHashSet();
-            var tgt = targetIndexes.ToHashSet();
 
-            foreach (var i in src)
-            {
-                if (!tgt.Contains(i))
-                    results.Add(new KeyComparisonResult { SourceName = i, Comparison = "Missing in Target" });
-                else
-                    results.Add(new KeyComparisonResult { SourceName = i, DestinationName = i, Comparison = "Matching" });
-            }
-
-            foreach (var i in tgt.Except(src))
-            {
-                results.Add(new KeyComparisonResult { DestinationName = i, Comparison = "Missing in Source" });
-            }
-
-            return results;
-        }
-        public List<KeyComparisonResult> CompareSequences(List<string> sourceSequences, List<string> targetSequences)
-        {
-            var results = new List<KeyComparisonResult>();
-            var src = sourceSequences.ToHashSet();
-            var tgt = targetSequences.ToHashSet();
-
-            foreach (var s in src)
-            {
-                if (!tgt.Contains(s))
-                    results.Add(new KeyComparisonResult { SourceName = s, Comparison = "Missing in Target" });
-                else
-                    results.Add(new KeyComparisonResult { SourceName = s, DestinationName = s, Comparison = "Matching" });
-            }
-
-            foreach (var s in tgt.Except(src))
-            {
-                results.Add(new KeyComparisonResult { DestinationName = s, Comparison = "Missing in Source" });
-            }
-
-            return results;
-        }
-        public bool CompareDefinitions(string src, string tgt) => NormalizedDefinition.Normalize(src) == NormalizedDefinition.Normalize(tgt);
+        public bool CompareDefinitions(string src, string tgt) =>
+            NormalizedDefinition.Normalize(src) == NormalizedDefinition.Normalize(tgt);
     }
 }

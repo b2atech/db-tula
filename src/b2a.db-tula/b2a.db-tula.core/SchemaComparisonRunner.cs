@@ -34,13 +34,26 @@ namespace b2a.db_tula.core
             var sourceTables = await _source.GetTablesAsync();
             var targetTables = await _target.GetTablesAsync();
 
-            report.TableResults = _comparer.CompareTables(_source, _target, sourceTables, targetTables, (i, total, tableName) => log($"Tables compared: {i}/{total} - {tableName}", LogLevel.Basic)
-);
+            // Keep only the first 10 tables ordered by name for testing
+            //sourceTables = sourceTables.AsEnumerable()
+            //    .OrderBy(row => row["table_name"].ToString())
+            //    .Take(10)
+            //    .CopyToDataTable();
+
+            //targetTables = targetTables.AsEnumerable()
+            //    .OrderBy(row => row["table_name"].ToString())
+            //    .Take(10)
+            //    .CopyToDataTable();
+
+            report.TableResults = await _comparer.CompareTablesAsync(
+                _source, _target, sourceTables, targetTables,
+                (i, total, tableName) => log($"Tables compared: {i}/{total} - {tableName}", LogLevel.Basic)
+            );
 
             foreach (var item in report.TableResults.Where(i => i.Comparison.NeedsSync()))
             {
-                var srcDef = _source.GetTableDefinition(item.SourceName);
-                var tgtDef = _target.GetTableDefinition(item.DestinationName);
+                var srcDef = item.SourceDefinition;
+                var tgtDef = item.DestinationDefinition;
                 var syncCommands = _syncer.GenerateSyncCommands(srcDef, tgtDef);
                 var comment = BuildComment("Table", item.SourceName, item.Comparison);
                 item.SyncScript = JoinCommandsWithComment(comment, syncCommands);
@@ -82,29 +95,7 @@ namespace b2a.db_tula.core
 
 
 
-            report.IndexResults = new List<KeyComparisonResult>();
-            foreach (DataRow row in sourceTables.Rows)
-            {
-                var name = row["table_name"].ToString();
-                var srcIndexes = (await _source.GetIndexesAsync(name)).AsEnumerable().Select(r => r["indexname"].ToString()).ToList();
-                var tgtIndexes = (await _target.GetIndexesAsync(name)).AsEnumerable().Select(r => r["indexname"].ToString()).ToList();
 
-                var tableIndexResults = _comparer.CompareIndexes(srcIndexes, tgtIndexes);
-
-                foreach (var indexResult in tableIndexResults.Where(r => r.Comparison.NeedsSync()))
-                {
-                    indexResult.SyncScript = await GenerateScriptWithCommentAsync(
-                        "Index",
-                        indexResult.Comparison,
-                        indexResult.SourceName,
-                        () => _source.GetIndexDefinitionAsync(indexResult.SourceName),
-                        () => _target.GetIndexDefinitionAsync(indexResult.DestinationName),
-                        _syncer.GenerateSyncCommands
-                    );
-                }
-
-                report.IndexResults.AddRange(tableIndexResults);
-            }
 
 
 
@@ -128,28 +119,45 @@ namespace b2a.db_tula.core
             return report;
         }
         private async Task<string> GenerateScriptWithCommentAsync<T>(
-                                string objectType,
-                                string comparisonType,
-                                string sourceName,
-                                Func<Task<T>> getSourceDef,
-                                Func<Task<T>> getTargetDef,
-                                Func<T, T, string, List<string>> syncCommandGenerator)
-        {
-            var srcDef = await getSourceDef();
-            var tgtDef = await getTargetDef();
-            var syncCommands = syncCommandGenerator(srcDef, tgtDef, objectType);
-            var comment = comparisonType == "Missing in Target"
-                ? $"-- {objectType} missing: \"{sourceName}\""
-                : $"-- {objectType} not matching: \"{sourceName}\"";
-            return $"{comment}\n{string.Join("\n", syncCommands)}";
-        }
+             string objectType,
+             ComparisonType comparisonType,
+             string sourceName,
+             Func<Task<T>> getSourceDef,
+             Func<Task<T>> getTargetDef,
+             Func<T, T, string, List<string>> syncCommandGenerator)
+                {
+                    var srcDef = await getSourceDef();
+                    var tgtDef = await getTargetDef();
+                    var syncCommands = syncCommandGenerator(srcDef, tgtDef, objectType);
+
+                    var comment = comparisonType switch
+                    {
+                        ComparisonType.MissingInTarget => $"-- {objectType} missing in target: \"{sourceName}\"",
+                        ComparisonType.MissingInSource => $"-- {objectType} missing in source: \"{sourceName}\"",
+                        ComparisonType.ExtraInTarget => $"-- {objectType} extra in target: \"{sourceName}\"",
+                        ComparisonType.Changed => $"-- {objectType} differs: \"{sourceName}\"",
+                        _ => $"-- {objectType} matches: \"{sourceName}\""
+                    };
+
+                    return $"{comment}\n{string.Join("\n", syncCommands)}";
+                }
 
 
-        private string BuildComment(string objectType, string objectName, string comparison) =>
-                        $"-- {objectType} {(comparison == "Missing in Target" ? "missing" : "not matching")}: \"{objectName}\"";
+
+        private string BuildComment(string objectType, string objectName, ComparisonType comparison) =>
+                     comparison switch
+                     {
+                         ComparisonType.MissingInTarget => $"-- {objectType} missing in target: \"{objectName}\"",
+                         ComparisonType.MissingInSource => $"-- {objectType} missing in source: \"{objectName}\"",
+                         ComparisonType.ExtraInTarget => $"-- {objectType} extra in target: \"{objectName}\"",
+                         ComparisonType.Changed => $"-- {objectType} differs: \"{objectName}\"",
+                         _ => $"-- {objectType} matches: \"{objectName}\""
+                     };
 
         private string JoinCommandsWithComment(string comment, List<string> syncCommands) =>
                         $"{comment}\n{string.Join("\n", syncCommands)}";
+
+        
 
     }
 }

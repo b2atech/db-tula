@@ -16,7 +16,7 @@ namespace b2a.db_tula.core.Models
         public string DestinationLength { get; set; }
         public string SourceNullable { get; set; }
         public string DestinationNullable { get; set; }
-        public string Comparison { get; set; }
+        public ComparisonType Comparison { get; set; }
         public string Details { get; set; } // Additional details for errors or exceptions
     }
 }

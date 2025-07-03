@@ -27,6 +27,14 @@
         .code-block {
             position: relative;
         }
+
+            .code-block pre {
+                max-width: 100%;
+                overflow-x: auto;
+                background-color: #f8f9fa;
+                padding: 0.75rem;
+                border-radius: 0.25rem;
+            }
     </style>
 </head>
 <body class="container my-4">
@@ -46,21 +54,26 @@
                 <input class="form-check-input" type="checkbox" id="missingTargetOnly" onchange="applyFilters()">
                 <label class="form-check-label" for="missingTargetOnly">Missing in target</label>
             </div>
+
         </div>
         <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#syncScriptModal">
             Show All Sync Scripts
         </button>
     </div>
 
-    <table class="table table-bordered table-striped">
+    <table class="table table-bordered table-striped align-middle">
         <thead class="table-light">
             <tr>
                 <th>Type</th>
                 <th>Name</th>
+                <th>Column Count</th>
+                <th>Primary Keys</th>
+                <th>Foreign Keys</th>
+                <th>Indexes</th>
                 <th>Source</th>
                 <th>Destination</th>
                 <th>Comparison</th>
-                <th>Definition</th>
+                <th>Details</th>
             </tr>
         </thead>
         <tbody>
@@ -72,40 +85,112 @@
             {
                 var rowClass = item.Comparison switch
                 {
-                    "Matching" => "",
-                    "Not Matching" => "mismatch",
-                    "Missing in Target" or "Missing in Source" => "missing",
+                    ComparisonType.Same => "",
+                    ComparisonType.Changed => "mismatch",
+                    ComparisonType.MissingInTarget or ComparisonType.MissingInSource or ComparisonType.ExtraInTarget => "missing",
                     _ => ""
                 };
 
-                var sourceState = item.Comparison == "Missing in Source" ? "Missing" : "Present";
-                var targetState = item.Comparison == "Missing in Target" ? "Missing" : "Present";
-                if (item.Comparison == "Matching" || item.Comparison == "Not Matching")
+                var columnCount = item.Type == "Table" ? item.ColumnComparisonResults?.Count.ToString() ?? "0" : "-";
+                var pkText = item.PrimaryKeyComparisonResults?.Any(r => r.Comparison != ComparisonType.Same) == true
+                ? $"{item.PrimaryKeyComparisonResults.Count(r => r.Comparison != ComparisonType.Same)} issue(s)"
+                : "OK";
+                var fkText = item.ForeignKeyComparisonResults?.Any(r => r.Comparison != ComparisonType.Same) == true
+                ? $"{item.ForeignKeyComparisonResults.Count(r => r.Comparison != ComparisonType.Same)} issue(s)"
+                : "OK";
+                var idxText = item.IndexComparisonResults?.Any(r => r.Comparison != ComparisonType.Same) == true
+                ? $"{item.IndexComparisonResults.Count(r => r.Comparison != ComparisonType.Same)} issue(s)"
+                : "OK";
+
+                var sourceState = item.Comparison == ComparisonType.MissingInSource ? "Missing" : "Present";
+                var targetState = item.Comparison == ComparisonType.MissingInTarget ? "Missing" : "Present";
+
+                if (item.Comparison == ComparisonType.Same || item.Comparison == ComparisonType.Changed)
                 {
                     sourceState = "Present";
                     targetState = "Present";
                 }
 
-                <tr class="@rowClass" data-comparison="@item.Comparison">
+                <tr class="@rowClass" data-comparison="@item.Comparison.ToString()">
                     <td>@item.Type</td>
                     <td>@(item.SourceName ?? item.DestinationName)</td>
+                    <td>@columnCount</td>
+                    <td>@pkText</td>
+                    <td>@fkText</td>
+                    <td>@idxText</td>
                     <td>@sourceState</td>
                     <td>@targetState</td>
-                    <td>@item.Comparison</td>
+                    <td>@item.Comparison.ToString().Replace("In", " in ")</td>
                     <td>
-                        @if (!string.IsNullOrWhiteSpace(item.SourceDefinition) || !string.IsNullOrWhiteSpace(item.DestinationDefinition))
-                        {
-                            var defId = $"code-block-{idCounter++}";
-                            <details>
-                                <summary>View</summary>
-                                <div class="code-block">
-                                    <button class="btn btn-sm btn-outline-secondary copy-btn" onclick="copyToClipboard('@defId')">Copy</button>
-                                    <pre><code class="language-sql" id="@defId">
-                                            @item.SourceDefinition
-                                            @item.DestinationDefinition</code></pre>
-                                </div>
-                            </details>
-                        }
+                        <details>
+                            <summary>View Details</summary>
+                            <div class="mt-2">
+
+                                @if (item.ColumnComparisonResults?.Any() == true)
+                                {
+                                    <strong>Column Differences:</strong>
+                                    <ul>
+                                        @foreach (var col in item.ColumnComparisonResults)
+                                        {
+                                            <li>
+                                                @(col.SourceName ?? col.DestinationName) — @col.Comparison
+                                                @if (!string.IsNullOrWhiteSpace(col.SourceType) || !string.IsNullOrWhiteSpace(col.DestinationType))
+                                                {
+                                                    <text> (Type: @col.SourceType → @col.DestinationType)</text>
+                                                }
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+
+                                @if (item.PrimaryKeyComparisonResults?.Any(r => r.Comparison != ComparisonType.Same) == true)
+                                {
+                                    <strong>Primary Keys:</strong>
+                                    <ul>
+                                        @foreach (var pk in item.PrimaryKeyComparisonResults.Where(r => r.Comparison != ComparisonType.Same))
+                                        {
+                                            <li>@(pk.SourceName ?? pk.DestinationName) — @pk.Comparison</li>
+                                        }
+                                    </ul>
+                                }
+
+                                @if (item.ForeignKeyComparisonResults?.Any(r => r.Comparison != ComparisonType.Same) == true)
+                                {
+                                    <strong>Foreign Keys:</strong>
+                                    <ul>
+                                        @foreach (var fk in item.ForeignKeyComparisonResults.Where(r => r.Comparison != ComparisonType.Same))
+                                        {
+                                            <li>@(fk.SourceName ?? fk.DestinationName) — @fk.Comparison</li>
+                                        }
+                                    </ul>
+                                }
+
+                                @if (item.IndexComparisonResults?.Any(r => r.Comparison != ComparisonType.Same) == true)
+                                {
+                                    <strong>Indexes:</strong>
+                                    <ul>
+                                        @foreach (var idx in item.IndexComparisonResults.Where(r => r.Comparison != ComparisonType.Same))
+                                        {
+                                            <li>@(idx.SourceName ?? idx.DestinationName) — @idx.Comparison</li>
+                                        }
+                                    </ul>
+                                }
+
+                                @if (item.SourceDefinition != null || item.DestinationDefinition != null || !string.IsNullOrWhiteSpace(item.SyncScript))
+                                {
+                                    var defId = $"code-block-{idCounter++}";
+                                    var combinedScript = (item.SourceDefinition?.CreateScript + "\n" + item.DestinationDefinition?.CreateScript  + "\n" + item.SyncScript )?.Trim();
+                                    var encodedScript = HtmlEncoder.Encode(combinedScript);
+
+                                    <div class="code-block mt-2">
+                                        <button class="btn btn-sm btn-outline-secondary copy-btn" onclick="copyToClipboard('@defId')">Copy</button>
+                                        <pre class="overflow-auto">
+                                        <code class="language-sql hljs" id="@defId">@combinedScript</code>
+                                        </pre>
+                                    </div>
+                                }
+                            </div>
+                        </details>
                     </td>
                 </tr>
 
@@ -132,10 +217,7 @@
                     <div class="modal-body">
                         <div class="code-block">
                             <button class="btn btn-sm btn-primary copy-btn" onclick="copyToClipboard('@scriptBlockId')">Copy All</button>
-                            <pre>
-                            <code class="language-sql" id="@scriptBlockId">@allSyncScripts.ToString()</code>
-
-                            </pre>
+                            <pre><code class="language-sql" id="@scriptBlockId">@allSyncScripts.ToString()</code></pre>
                         </div>
                     </div>
                 </div>
@@ -150,19 +232,36 @@
             hljs.highlightAll();
         });
 
-        function applyFilters() {
+              function applyFilters() {
             const mismatch = document.getElementById('mismatchOnly').checked;
             const missingSource = document.getElementById('missingSourceOnly').checked;
             const missingTarget = document.getElementById('missingTargetOnly').checked;
-            document.querySelectorAll('table tbody tr[data-comparison]').forEach(row => {
+
+            const rows = document.querySelectorAll('table tbody tr[data-comparison]');
+
+            rows.forEach(row => {
                 const comparison = row.dataset.comparison;
-                let show = true;
-                if (mismatch && comparison === 'Matching') show = false;
-                if (missingSource && comparison !== 'Missing in Source') show = false;
-                if (missingTarget && comparison !== 'Missing in Target') show = false;
-                row.style.display = show ? '' : 'none';
+
+                const isMismatch = comparison !== 'Same';
+                const isMissingSource = comparison === 'MissingInSource';
+                const isMissingTarget = comparison === 'MissingInTarget';
+
+                // No filters selected → show all
+                if (!mismatch && !missingSource && !missingTarget) {
+                    row.style.display = '';
+                    return;
+                }
+
+                // Apply active filters
+                const shouldShow =
+                    (mismatch && isMismatch) ||
+                    (missingSource && isMissingSource) ||
+                    (missingTarget && isMissingTarget);
+
+                row.style.display = shouldShow ? '' : 'none';
             });
         }
+
 
         function copyToClipboard(id) {
             const el = document.getElementById(id);

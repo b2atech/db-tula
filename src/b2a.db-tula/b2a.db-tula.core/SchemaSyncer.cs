@@ -20,25 +20,25 @@ namespace b2a.db_tula.core
             _log = log;
         }
 
-        public void SyncTable(string sourceTable, string targetTable)
-        {
-            var sourceSchemaFetcher = new SchemaFetcher(_sourceConnection, _log);
-            var sourceTableDefinition = sourceSchemaFetcher.GetTableDefinition(sourceTable);
+        //public void SyncTable(string sourceTable, string targetTable)
+        //{
+        //    var sourceSchemaFetcher = new SchemaFetcher(_sourceConnection, _log);
+        //    var sourceTableDefinition = sourceSchemaFetcher.GetTableDefinition(sourceTable);
 
-            var targetSchemaFetcher = new SchemaFetcher(_targetConnection, _log);
-            var targetTableDefinition = targetSchemaFetcher.GetTableDefinition(targetTable);
+        //    var targetSchemaFetcher = new SchemaFetcher(_targetConnection, _log);
+        //    var targetTableDefinition = targetSchemaFetcher.GetTableDefinition(targetTable);
 
-            var schemaComparer = new SchemaComparer();
-            var sqlCommands = schemaComparer.GenerateSyncCommands(sourceTableDefinition, targetTableDefinition);
+        //    var schemaComparer = new SchemaComparer();
+        //    var sqlCommands = schemaComparer.GenerateSyncCommands(sourceTableDefinition, targetTableDefinition);
 
-            foreach (var command in sqlCommands)
-            {
-                _targetConnection.ExecuteCommand(command);
-                _log($"Executed command: {command}");
-            }
+        //    foreach (var command in sqlCommands)
+        //    {
+        //        _targetConnection.ExecuteCommand(command);
+        //        _log($"Executed command: {command}");
+        //    }
 
-            _log($"Table '{sourceTable}' synced successfully.");
-        }
+        //    _log($"Table '{sourceTable}' synced successfully.");
+        //}
 
         public List<string> GenerateSyncCommands(TableDefinition sourceTable, TableDefinition? targetTable)
         {

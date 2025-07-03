@@ -122,12 +122,32 @@ namespace b2a.db_tula.core
 
         public async Task<DataTable> GetPrimaryKeysAsync(string tableName)
         {
-            string query = $"SELECT kcu.column_name FROM information_schema.table_constraints tc " +
-                           $"JOIN information_schema.key_column_usage kcu " +
-                           $"ON tc.constraint_name = kcu.constraint_name " +
-                           $"WHERE tc.table_name = '{tableName}' AND tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public'";
-            return await ExecuteQueryAsync(query);
+            string query = @"
+                    SELECT 
+                        tc.constraint_name,
+                        kcu.column_name
+                    FROM 
+                        information_schema.table_constraints tc
+                    JOIN 
+                        information_schema.key_column_usage kcu 
+                        ON tc.constraint_name = kcu.constraint_name
+                        AND tc.table_schema = kcu.table_schema
+                        AND tc.table_name = kcu.table_name
+                    WHERE 
+                        tc.table_name = @tableName
+                        AND tc.constraint_type = 'PRIMARY KEY'
+                        AND tc.table_schema = 'public'
+                    ORDER BY 
+                        kcu.ordinal_position;";
+
+                        var parameters = new Dictionary<string, object>
+                {
+                    { "@tableName", tableName }
+                };
+
+            return await ExecuteQueryAsync(query, parameters);
         }
+
 
         public async Task<DataTable> GetForeignKeysAsync(string tableName)
         {
@@ -163,10 +183,10 @@ namespace b2a.db_tula.core
             return result;
         }
 
-        public List<ColumnDefinition> GetColumnsList(string tableName)
+        public async Task<List<ColumnDefinition>> GetColumnsListAsync(string tableName)
         {
             var columnList = new List<ColumnDefinition>();
-            var columnDataTable = GetColumnsAsync(tableName).GetAwaiter().GetResult();
+            var columnDataTable = await GetColumnsAsync(tableName);
 
             foreach (DataRow row in columnDataTable.Rows)
             {
@@ -181,10 +201,11 @@ namespace b2a.db_tula.core
             return columnList;
         }
 
-        public List<string> GetPrimaryKeysList(string tableName)
+
+        public async Task<List<string>> GetPrimaryKeysListAsync(string tableName)
         {
             var primaryKeyList = new List<string>();
-            var primaryKeyDataTable = GetPrimaryKeysAsync(tableName).GetAwaiter().GetResult();
+            var primaryKeyDataTable = await GetPrimaryKeysAsync(tableName);
 
             foreach (DataRow row in primaryKeyDataTable.Rows)
             {
@@ -194,10 +215,10 @@ namespace b2a.db_tula.core
             return primaryKeyList;
         }
 
-        public List<ForeignKeyDefinition> GetForeignKeysList(string tableName)
+        public async Task<List<ForeignKeyDefinition>> GetForeignKeysListAsync(string tableName)
         {
             var foreignKeyList = new List<ForeignKeyDefinition>();
-            var foreignKeyDataTable = GetForeignKeysAsync(tableName).GetAwaiter().GetResult();
+            var foreignKeyDataTable = await GetForeignKeysAsync(tableName);
 
             foreach (DataRow row in foreignKeyDataTable.Rows)
             {
@@ -221,37 +242,59 @@ namespace b2a.db_tula.core
             return foreignKeyList;
         }
 
-        public TableDefinition GetTableDefinition(string tableName)
+        public async Task<TableDefinition> GetTableDefinitionAsync(string tableName)
         {
-            var tableDefinition = new TableDefinition
+            var columnsTask = GetColumnsListAsync(tableName);
+            var pkTask = GetPrimaryKeysListAsync(tableName);
+            var fkTask = GetForeignKeysListAsync(tableName);
+            var scriptTask = GetCreateTableScriptAsync(tableName);
+
+            await Task.WhenAll(columnsTask,scriptTask);
+
+            return new TableDefinition
             {
                 Name = tableName,
-                Columns = GetColumnsList(tableName),
-                PrimaryKeys = GetPrimaryKeysList(tableName),
-                PrimaryKeyColumns = GetPrimaryKeysList(tableName),
-                ForeignKeys = GetForeignKeysList(tableName),
-                CreateScript = GetCreateTableScript(tableName) // ✅ Add this
-
+                Columns = columnsTask.Result,
+                PrimaryKeys = pkTask.Result,
+                PrimaryKeyColumns = pkTask.Result,
+                ForeignKeys = fkTask.Result,
+                CreateScript = scriptTask.Result
             };
-
-            return tableDefinition;
         }
 
-        public string? GetCreateTableScript(string tableName)
+
+        public async Task<string?> GetCreateTableScriptAsync(string tableName)
         {
-            var query = $"SELECT pg_get_tabledef('{tableName}')"; // Replace with real query or build manually
-            var result = _connection.ExecuteQuery(query);
+            var query = $"SELECT pg_get_tabledef('{tableName}')"; // Replace with real query if needed
+            var result = await _connection.ExecuteQueryAsync(query);
             return result.Rows.Count > 0 ? result.Rows[0][0].ToString() : null;
         }
+
         public async Task<DataTable> GetIndexesAsync(string tableName)
         {
             string query = $@"
-                        SELECT indexname 
-                        FROM pg_indexes 
-                        WHERE schemaname = 'public' 
-                        AND tablename = '{tableName}';";
+                            SELECT
+                                i.relname AS indexname,
+                                t.relname AS tablename,
+                                a.attname AS columnname,
+                                ix.indisunique AS is_unique,
+                                am.amname AS index_type
+                            FROM
+                                pg_class t
+                                JOIN pg_index ix ON t.oid = ix.indrelid
+                                JOIN pg_class i ON i.oid = ix.indexrelid
+                                JOIN pg_am am ON i.relam = am.oid
+                                JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+                            WHERE
+                                t.relname = '{tableName}'
+                                AND a.attnum > 0
+                            ORDER BY
+                                i.relname, a.attnum;
+                        ";
+
             return await ExecuteQueryAsync(query);
         }
+
 
         public async Task<DataTable> GetSequencesAsync()
         {
