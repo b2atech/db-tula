@@ -11,3 +11,14 @@
 /src/b2a.db-tula/b2a.db-tula.cli/obj
 /src/b2a.db-tula/b2a.db-tula.core/bin/Debug/net9.0
 /src/b2a.db-tula/b2a.db-tula.core/obj
+/src/B2A.DbTula.Infrastructure.MySql/bin/Debug/net9.0
+/src/B2A.DbTula.Infrastructure.MySql/obj/Debug/net9.0
+/src/B2A.DbTula.Infrastructure.MySql/obj
+/src/B2A.DbTula.Infrastructure.Postgres/obj
+/src/B2A.DbTula.Infrastructure.Postgres/bin/Debug/net9.0
+/src/B2A.DbTula.Core/bin/Debug/net9.0
+/src/B2A.DbTula.Core/obj
+/src/B2A.DbTula.Cli/bin/Debug/net9.0
+/src/B2A.DbTula.Cli/obj
+/src/B2A.DbTula.Cli/Properties/launchSettings.json
+/src/b2a.db-tula/b2a.db-tula.zip

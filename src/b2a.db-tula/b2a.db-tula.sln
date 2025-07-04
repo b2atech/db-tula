@@ -9,6 +9,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "b2a.db-tula.core", "b2a.db-
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "b2a.db-tula.cli", "b2a.db-tula.cli\b2a.db-tula.cli.csproj", "{42E3CDCD-DC69-4CD5-97A0-56181A003922}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "B2A.DbTula.Core", "..\B2A.DbTula.Core\B2A.DbTula.Core.csproj", "{A5DB6850-82A2-44DC-BA98-963ABD905EDC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "B2A.DbTula.Infrastructure.Postgres", "..\B2A.DbTula.Infrastructure.Postgres\B2A.DbTula.Infrastructure.Postgres.csproj", "{44EE9E24-1808-4C23-AB57-E9BDCCFC6B3A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "B2A.DbTula.Infrastructure.MySql", "..\B2A.DbTula.Infrastructure.MySql\B2A.DbTula.Infrastructure.MySql.csproj", "{CFDDA3DC-68F2-4515-9C62-BD8A46027982}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "B2A.DbTula.Cli", "..\B2A.DbTula.Cli\B2A.DbTula.Cli.csproj", "{2697FF05-4139-4725-BE8B-A6BCF4447D86}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +35,22 @@ Global
 		{42E3CDCD-DC69-4CD5-97A0-56181A003922}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{42E3CDCD-DC69-4CD5-97A0-56181A003922}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{42E3CDCD-DC69-4CD5-97A0-56181A003922}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A5DB6850-82A2-44DC-BA98-963ABD905EDC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A5DB6850-82A2-44DC-BA98-963ABD905EDC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A5DB6850-82A2-44DC-BA98-963ABD905EDC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A5DB6850-82A2-44DC-BA98-963ABD905EDC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{44EE9E24-1808-4C23-AB57-E9BDCCFC6B3A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{44EE9E24-1808-4C23-AB57-E9BDCCFC6B3A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{44EE9E24-1808-4C23-AB57-E9BDCCFC6B3A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{44EE9E24-1808-4C23-AB57-E9BDCCFC6B3A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CFDDA3DC-68F2-4515-9C62-BD8A46027982}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CFDDA3DC-68F2-4515-9C62-BD8A46027982}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CFDDA3DC-68F2-4515-9C62-BD8A46027982}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CFDDA3DC-68F2-4515-9C62-BD8A46027982}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2697FF05-4139-4725-BE8B-A6BCF4447D86}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2697FF05-4139-4725-BE8B-A6BCF4447D86}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2697FF05-4139-4725-BE8B-A6BCF4447D86}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2697FF05-4139-4725-BE8B-A6BCF4447D86}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
