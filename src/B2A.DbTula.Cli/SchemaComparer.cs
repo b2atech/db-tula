@@ -10,11 +10,11 @@ public class SchemaComparer : ISchemaComparer
     public async Task<IList<ComparisonResult>> CompareAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
-        Action<string>? progressReporter = null, bool runForTest = false)
+        Action<int, int, string>? progressLogger = null, bool runForTest = false)
     {
         var results = new List<ComparisonResult>();
 
-        progressReporter?.Invoke("🔍 Fetching schema objects...");
+        progressLogger?.Invoke(0, 0, "🔍 Fetching schema objects...");
 
         var sourceTables = await sourceProvider.GetTablesAsync();
         var targetTables = await targetProvider.GetTablesAsync();
@@ -24,7 +24,7 @@ public class SchemaComparer : ISchemaComparer
 
         if (runForTest)
         {
-            progressReporter?.Invoke("🧪 Running in test mode, comparing top 10 tables only...");
+            progressLogger?.Invoke(0, 0, "🧪 Running in test mode, comparing top 10 tables only...");
 
             await CompareTablesAsync(
                 sourceTables.Take(10).ToList(),
@@ -32,31 +32,29 @@ public class SchemaComparer : ISchemaComparer
                 sourceTableMap,
                 targetTableMap,
                 results,
-                progressReporter);
+                (i, total, tableName) => Console.WriteLine($"Tables compared: {i}/{total} - {tableName}"));
 
-            progressReporter?.Invoke("🧪 Test mode complete. Skipping functions and procedures comparison.");
+            progressLogger?.Invoke(0, 0, "🧪 Test mode complete. Skipping functions and procedures comparison.");
             return results;
         }
 
-        await CompareTablesAsync(sourceTables,targetTables, sourceTableMap, targetTableMap, results, progressReporter);
+        await CompareTablesAsync(sourceTables, targetTables, sourceTableMap, targetTableMap, results, progressLogger);
 
-        
         var sourceFunctions = await sourceProvider.GetFunctionsAsync();
         var targetFunctions = await targetProvider.GetFunctionsAsync();
         var sourceFunctionMap = sourceFunctions.ToDictionary(f => f.Name, StringComparer.OrdinalIgnoreCase);
         var targetFunctionMap = targetFunctions.ToDictionary(f => f.Name, StringComparer.OrdinalIgnoreCase);
 
-
-        await CompareFunctionsAsync(sourceProvider, targetProvider, sourceFunctions, targetFunctionMap, results, progressReporter);
+        await CompareFunctionsAsync(sourceProvider, targetProvider, sourceFunctions, targetFunctionMap, results, progressLogger);
 
         var sourceProcedures = await sourceProvider.GetProceduresAsync();
         var targetProcedures = await targetProvider.GetProceduresAsync();
         var sourceProcedureMap = sourceProcedures.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
         var targetProcedureMap = targetProcedures.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
 
-        await CompareProceduresAsync(sourceProvider, targetProvider, sourceProcedures, targetProcedureMap, results, progressReporter);
+        await CompareProceduresAsync(sourceProvider, targetProvider, sourceProcedures, targetProcedureMap, results, progressLogger);
 
-        progressReporter?.Invoke("✅ Schema comparison completed.");
+        progressLogger?.Invoke(0, 0, "✅ Schema comparison completed.");
         return results;
     }
 
@@ -66,13 +64,13 @@ public class SchemaComparer : ISchemaComparer
         Dictionary<string, TableDefinition> sourceTableMap,
         Dictionary<string, TableDefinition> targetTableMap,
         List<ComparisonResult> results,
-        Action<string>? progressReporter)
+        Action<int, int, string>? progressLogger)
     {
-        progressReporter?.Invoke($"📄 Comparing {sourceTables.Count} tables...");
-
-        foreach (var source in sourceTables)
+        int total = sourceTables.Count;
+        for (int i = 0; i < sourceTables.Count; i++)
         {
-            progressReporter?.Invoke($"🔄 Comparing table: {source.Name}");
+            var source = sourceTables[i];
+            progressLogger?.Invoke(i + 1, total, $"🔄 Comparing table: {source.Name}");
 
             if (!targetTableMap.TryGetValue(source.Name, out var target))
             {
@@ -167,12 +165,14 @@ public class SchemaComparer : ISchemaComparer
         IList<DbFunctionDefinition> sourceFunctions,
         Dictionary<string, DbFunctionDefinition> targetFunctionMap,
         List<ComparisonResult> results,
-        Action<string>? progressReporter)
+        Action<int, int, string>? progressLogger)
     {
-        progressReporter?.Invoke($"⚙️ Comparing {sourceFunctions.Count} functions...");
-
-        foreach (var source in sourceFunctions)
+        int total = sourceFunctions.Count;
+        for (int i = 0; i < sourceFunctions.Count; i++)
         {
+            var source = sourceFunctions[i];
+            progressLogger?.Invoke(i + 1, total, $"⚙️ Comparing function: {source.Name}");
+
             if (!targetFunctionMap.TryGetValue(source.Name, out var target))
             {
                 results.Add(CreateResult(source.Name, SchemaObjectType.Function, ComparisonStatus.MissingInTarget, "Function missing in target"));
@@ -208,19 +208,20 @@ public class SchemaComparer : ISchemaComparer
         }
     }
 
-
     private static async Task CompareProceduresAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         IList<DbFunctionDefinition> sourceProcedures,
         Dictionary<string, DbFunctionDefinition> targetProcedureMap,
         List<ComparisonResult> results,
-        Action<string>? progressReporter)
+        Action<int, int, string>? progressLogger)
     {
-        progressReporter?.Invoke($"🛠 Comparing {sourceProcedures.Count} procedures...");
-
-        foreach (var source in sourceProcedures)
+        int total = sourceProcedures.Count;
+        for (int i = 0; i < sourceProcedures.Count; i++)
         {
+            var source = sourceProcedures[i];
+            progressLogger?.Invoke(i + 1, total, $"🛠 Comparing procedure: {source.Name}");
+
             if (!targetProcedureMap.TryGetValue(source.Name, out var target))
             {
                 results.Add(CreateResult(source.Name, SchemaObjectType.Procedure, ComparisonStatus.MissingInTarget, "Procedure missing in target"));

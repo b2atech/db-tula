@@ -22,7 +22,7 @@ try
     var sourceProvider = new PostgresSchemaProvider(argsParsed.SourceConnectionString,Console.WriteLine,verbose: true,logLevel: LogLevel.Basic);
     var targetProvider = new PostgresSchemaProvider(argsParsed.TargetConnectionString, Console.WriteLine, verbose: true, logLevel: LogLevel.Basic);
 
-    var output =     await comparer.CompareAsync(sourceProvider,targetProvider,Console.WriteLine, true);
+    var output =     await comparer.CompareAsync(sourceProvider,targetProvider, (i, total, tableName) => Console.WriteLine($"Tables compared: {i}/{total} - {tableName}"), true);
     
     Log.Logger.Information("✅ Comparison and reprt generation completed.");
 }

@@ -8,7 +8,7 @@ public interface ISchemaComparer
     Task<IList<ComparisonResult>> CompareAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
-        Action<string>? progressReporter = null,
+         Action<int, int, string>? progressLogger = null,
         bool runForTest = false
     );
 }

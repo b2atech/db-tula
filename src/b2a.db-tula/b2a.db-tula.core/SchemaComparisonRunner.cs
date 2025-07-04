@@ -47,7 +47,7 @@ namespace b2a.db_tula.core
 
             report.TableResults = await _comparer.CompareTablesAsync(
                 _source, _target, sourceTables, targetTables,
-                (i, total, tableName) => log($"Tables compared: {i}/{total} - {tableName}", LogLevel.Basic)
+                (i, total, tableName) => Console.WriteLine($"Tables compared: {i}/{total} - {tableName}", LogLevel.Basic)
             );
 
             foreach (var item in report.TableResults.Where(i => i.Comparison.NeedsSync()))
@@ -63,7 +63,8 @@ namespace b2a.db_tula.core
 
             var sourceFuncs = await _source.GetFunctionsAsync();
             var targetFuncs = await _target.GetFunctionsAsync();
-            report.FunctionResults = _comparer.CompareFunctions(_source, _target, sourceFuncs, targetFuncs, (i, total, fnctionName) => log($"Functions compared: {i}/{total} - {fnctionName}", LogLevel.Basic));
+            report.FunctionResults = _comparer.CompareFunctions(_source, _target, sourceFuncs, targetFuncs, 
+                (i, total, fnctionName) => Console.WriteLine($"Functions compared: {i}/{total} - {fnctionName}", LogLevel.Basic));
 
             foreach (var item in report.FunctionResults.Where(i => i.Comparison.NeedsSync()))
             {
@@ -79,7 +80,8 @@ namespace b2a.db_tula.core
 
             var sourceProcs = await _source.GetProceduresAsync();
             var targetProcs = await _target.GetProceduresAsync();
-            report.ProcedureResults = _comparer.CompareProcedures(_source, _target, sourceProcs, targetProcs, (i, total, procedureName) => log($"Procedures compared: {i}/{total} - {procedureName}", LogLevel.Basic));
+            report.ProcedureResults = _comparer.CompareProcedures(_source, _target, sourceProcs, targetProcs, 
+                (i, total, procedureName) => Console.WriteLine($"Procedures compared: {i}/{total} - {procedureName}", LogLevel.Basic));
 
             foreach (var item in report.ProcedureResults.Where(i => i.Comparison.NeedsSync()))
             {
