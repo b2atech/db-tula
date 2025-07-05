@@ -50,7 +50,7 @@ jobs:
             dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
               --source "$SOURCE_CONN" \
               --target "$TARGET_CONN" \
-              --title "${service} Schema Comparison Report"
+              --title "${service} Schema Comparison Report" \
               --test \
               --limit 5 \
               --out "gh-pages/${service}.html"
