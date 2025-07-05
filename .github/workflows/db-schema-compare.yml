@@ -1,7 +1,9 @@
 name: DB Schema Comparison
 
 on:
-  workflow_dispatch: # Trigger manually for now
+  schedule:
+    - cron: '30 18 * * *'   # ⏰ Every day at midnight IST (18:30 UTC)
+  workflow_dispatch:        # 🖱️ Manual trigger support
 
 jobs:
   compare-schemas:
