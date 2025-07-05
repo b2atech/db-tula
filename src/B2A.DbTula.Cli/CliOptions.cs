@@ -1,5 +1,6 @@
 ﻿namespace B2A.DbTula.Cli;
 
+
 public class CliOptions
 {
     public string SourceConnectionString { get; set; }
@@ -7,6 +8,10 @@ public class CliOptions
     public DbType SourceType { get; set; }
     public DbType TargetType { get; set; }
     public string OutputFile { get; set; } = "schema-sync.html";
+
+    // New test options
+    public bool TestMode { get; set; } = false;
+    public int TestObjectLimit { get; set; } = 10;
 
     public bool IsValid =>
         !string.IsNullOrWhiteSpace(SourceConnectionString) &&
@@ -26,16 +31,23 @@ public class CliOptions
                 case "--target":
                     if (i + 1 < args.Length) options.TargetConnectionString = args[++i];
                     break;
-                case "--sourceType":
+                case "--sourcetype":
                     if (i + 1 < args.Length && Enum.TryParse<DbType>(args[++i], true, out var srcType))
                         options.SourceType = srcType;
                     break;
-                case "--targetType":
+                case "--targettype":
                     if (i + 1 < args.Length && Enum.TryParse<DbType>(args[++i], true, out var tgtType))
                         options.TargetType = tgtType;
                     break;
                 case "--out":
                     if (i + 1 < args.Length) options.OutputFile = args[++i];
+                    break;
+                case "--test":
+                    options.TestMode = true;
+                    break;
+                case "--limit":
+                    if (i + 1 < args.Length && int.TryParse(args[++i], out var limit))
+                        options.TestObjectLimit = limit;
                     break;
             }
         }
@@ -47,9 +59,14 @@ public class CliOptions
     {
         return @"
                 Usage:
-                  dotnet db-tula.cli.dll --source <src-conn> --target <tgt-conn> --sourceType postgres --targetType mysql [--out schema-sync.html]
+                  dotnet db-tula.cli.dll --source <src-conn> --target <tgt-conn> --sourceType postgres --targetType mysql [--out schema-sync.html] [--test] [--limit 5]
 
-                Supported Types: postgres, mysql
+                Supported Types:
+                  postgres, mysql
+
+                Options:
+                  --test              Enable test mode (only compare limited number of objects)
+                  --limit <number>    Number of objects to compare when in test mode (default: 10)
                 ";
     }
 }

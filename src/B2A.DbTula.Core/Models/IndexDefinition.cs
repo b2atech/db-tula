@@ -6,4 +6,5 @@ public class IndexDefinition
     public List<string> Columns { get; set; } = new(); // Handles composite indexes
     public bool IsUnique { get; set; }
     public string IndexType { get; set; } = string.Empty; // Optional: btree, gin, etc.
+    public string CreateScript { get; set; } = string.Empty; // <-- new
 }

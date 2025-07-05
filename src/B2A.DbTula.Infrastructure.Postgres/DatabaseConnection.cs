@@ -7,11 +7,11 @@ namespace B2A.DbTula.Infrastructure.Postgres;
 public class DatabaseConnection
 {
     private readonly string _connectionString;
-    private readonly Action<string> _logger;
+    private readonly Action<int, int, string, bool> _logger;
     private readonly bool _verbose;
     private readonly LogLevel _logLevel;
 
-    public DatabaseConnection(string connectionString, Action<string> logger, bool verbose, LogLevel logLevel)
+    public DatabaseConnection(string connectionString, Action<int, int, string, bool>? logger, bool verbose, LogLevel logLevel)
     {
         _connectionString = connectionString;
         _logger = logger;
@@ -117,11 +117,11 @@ public class DatabaseConnection
     public void Log(string message)
     {
         if (_verbose)
-            _logger?.Invoke($"[{_logLevel}] {message}");
+            _logger?.Invoke(0,0,$"[{_logLevel}] {message}",false);
     }
 
     private void LogError(string message)
     {
-        _logger?.Invoke($"[ERROR] {message}");
+        _logger?.Invoke(0,0,$"[ERROR] {message}", false);
     }
 }

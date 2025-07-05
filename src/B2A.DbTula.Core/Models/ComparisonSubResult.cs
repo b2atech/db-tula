@@ -13,14 +13,16 @@ public class ComparisonSubResult
     public string Component { get; set; } = string.Empty; // e.g., "Columns", "PrimaryKeys", "ForeignKeys"
     public ComparisonStatus Status { get; set; }           // Match, Mismatch, MissingInSource, etc.
     public string Details { get; set; } = string.Empty;
+    public string CreateScript { get; set; } = string.Empty;
 
     public ComparisonSubResult() { }
 
-    public ComparisonSubResult(string component, ComparisonStatus status, string details)
+    public ComparisonSubResult(string component, ComparisonStatus status, string details, string createScript)
     {
         Component = component;
         Status = status;
         Details = details;
+        CreateScript = createScript;
     }
 
     public string DisplayStatus => Status.ToDisplayString();

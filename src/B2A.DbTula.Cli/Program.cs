@@ -1,5 +1,7 @@
 ﻿using B2a.DbTula.Infrastructure.Postgres;
 using B2A.DbTula.Cli;
+using B2A.DbTula.Cli.Helpers;
+using B2A.DbTula.Cli.Reports;
 using B2A.DbTula.Core.Enums;
 using Serilog;
 
@@ -17,13 +19,23 @@ try
         return;
     }
 
+    var unifiedLogger = LoggerHelpers.CreateUnifiedLogger();
+
     var comparer = new SchemaComparer();
 
-    var sourceProvider = new PostgresSchemaProvider(argsParsed.SourceConnectionString,Console.WriteLine,verbose: true,logLevel: LogLevel.Basic);
-    var targetProvider = new PostgresSchemaProvider(argsParsed.TargetConnectionString, Console.WriteLine, verbose: true, logLevel: LogLevel.Basic);
+    var sourceProvider = new PostgresSchemaProvider(argsParsed.SourceConnectionString, unifiedLogger, verbose: true,logLevel: LogLevel.Basic);
+    var targetProvider = new PostgresSchemaProvider(argsParsed.TargetConnectionString, unifiedLogger, verbose: true, logLevel: LogLevel.Basic);
 
-    var output =     await comparer.CompareAsync(sourceProvider,targetProvider, (i, total, tableName) => Console.WriteLine($"Tables compared: {i}/{total} - {tableName}"), true);
-    
+    var comparisonResults = await comparer.CompareAsync(sourceProvider, targetProvider, unifiedLogger, argsParsed.TestMode, argsParsed.TestObjectLimit);
+
+    var report = new SchemaComparisonReport
+    {
+        Title = "Schema Comparison Report", // optional, or customize
+        GeneratedOn = DateTime.UtcNow,
+        Results = comparisonResults.ToList()
+    };
+    await HtmlReportGenerator.GenerateWithRazorAsync(report, argsParsed.OutputFile);
+
     Log.Logger.Information("✅ Comparison and reprt generation completed.");
 }
 catch (Exception ex)

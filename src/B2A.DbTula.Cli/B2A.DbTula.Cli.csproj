@@ -5,9 +5,12 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+		<PreserveCompilationContext>true</PreserveCompilationContext>
+		<CopyRefAssembliesToPublishDirectory>true</CopyRefAssembliesToPublishDirectory>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="RazorLight" Version="2.3.1" />
     <PackageReference Include="Serilog" Version="4.3.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
@@ -19,5 +22,12 @@
     <ProjectReference Include="..\B2A.DbTula.Infrastructure.MySql\B2A.DbTula.Infrastructure.MySql.csproj" />
     <ProjectReference Include="..\B2A.DbTula.Infrastructure.Postgres\B2A.DbTula.Infrastructure.Postgres.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Reports\Templates\ComparisonReport.cshtml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+	
 
 </Project>

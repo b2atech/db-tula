@@ -16,24 +16,31 @@ public class ComparisonResult
     public string DisplayType => ObjectType.ToDisplayString();
     public string DisplayStatus => Status.ToDisplayString();
 
+    private static readonly HashSet<ComparisonStatus> _mismatchStatuses = new()
+    {
+        ComparisonStatus.Mismatch,
+        ComparisonStatus.MissingInTarget,
+        ComparisonStatus.MissingInSource
+    };
+
     // Derived mismatch indicators
     public bool HasPrimaryKeyMismatch =>
-        SubResults.Any(s => s.Component.Equals("PrimaryKeys", StringComparison.OrdinalIgnoreCase) &&
-                            s.Status == ComparisonStatus.Mismatch);
+    SubResults.Any(s => s.Component.Equals("PrimaryKeys", StringComparison.OrdinalIgnoreCase) &&
+                        _mismatchStatuses.Contains(s.Status));
 
     public bool HasForeignKeyMismatch =>
         SubResults.Any(s => s.Component.Equals("ForeignKeys", StringComparison.OrdinalIgnoreCase) &&
-                            s.Status == ComparisonStatus.Mismatch);
+                            _mismatchStatuses.Contains(s.Status));
 
     public bool HasColumnMismatch =>
         SubResults.Any(s => s.Component.Equals("Columns", StringComparison.OrdinalIgnoreCase) &&
-                            s.Status == ComparisonStatus.Mismatch);
+                            _mismatchStatuses.Contains(s.Status));
 
     public bool HasIndexMismatch =>
         SubResults.Any(s => s.Component.Equals("Indexes", StringComparison.OrdinalIgnoreCase) &&
-                            s.Status == ComparisonStatus.Mismatch);
+                            _mismatchStatuses.Contains(s.Status));
 
     public bool HasCreateScriptMismatch =>
         SubResults.Any(s => s.Component.Equals("CreateScript", StringComparison.OrdinalIgnoreCase) &&
-                            s.Status == ComparisonStatus.Mismatch);
+                            _mismatchStatuses.Contains(s.Status));
 }

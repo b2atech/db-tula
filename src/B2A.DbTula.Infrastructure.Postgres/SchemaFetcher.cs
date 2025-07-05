@@ -7,13 +7,13 @@ namespace B2A.DbTula.Infrastructure.Postgres;
 public class SchemaFetcher
 {
     private readonly DatabaseConnection _connection;
-    private readonly Action<string> _log;
+    private readonly Action<int, int, string, bool> _logger;
     private readonly LogLevel _logLevel;
 
-    public SchemaFetcher(DatabaseConnection connection, Action<string> log, object verbose, LogLevel logLevel = LogLevel.Basic)
+    public SchemaFetcher(DatabaseConnection connection, Action<int, int, string, bool> logger, object verbose, LogLevel logLevel = LogLevel.Basic)
     {
         _connection = connection;
-        _log = log;
+        _logger = logger;
         _logLevel = logLevel;
     }
 
@@ -30,7 +30,8 @@ public class SchemaFetcher
                         SELECT 
                             p.oid,
                             p.proname AS routine_name,
-                            pg_get_function_identity_arguments(p.oid) AS arguments 
+                            pg_get_function_identity_arguments(p.oid) AS arguments, 
+                            pg_get_functiondef(p.oid) AS definition
                         FROM pg_proc p 
                         JOIN pg_namespace n ON p.pronamespace = n.oid 
                         WHERE n.nspname = 'public' 
@@ -44,7 +45,8 @@ public class SchemaFetcher
                         SELECT 
                             p.oid,
                             p.proname AS routine_name,
-                            pg_get_function_identity_arguments(p.oid) AS arguments 
+                            pg_get_function_identity_arguments(p.oid) AS arguments,
+                           pg_get_functiondef(p.oid) AS definition
                         FROM pg_proc p 
                         JOIN pg_namespace n ON p.pronamespace = n.oid 
                         WHERE n.nspname = 'public' 
@@ -134,17 +136,23 @@ public class SchemaFetcher
         return columnList;
     }
 
-    public async Task<List<string>> GetPrimaryKeysListAsync(string tableName)
+    public async Task<List<PrimaryKeyDefinition>> GetPrimaryKeysListAsync(string tableName)
     {
-        var primaryKeyList = new List<string>();
-        var primaryKeyDataTable = await GetPrimaryKeysAsync(tableName);
+        var primaryKeys = new List<PrimaryKeyDefinition>();
+        var dataTable = await GetPrimaryKeysAsync(tableName);
 
-        foreach (DataRow row in primaryKeyDataTable.Rows)
+        foreach (DataRow row in dataTable.Rows)
         {
-            primaryKeyList.Add(row["column_name"].ToString());
+            primaryKeys.Add(new PrimaryKeyDefinition
+            {
+                Name = row["constraint_name"].ToString() ?? string.Empty,
+                Columns = new(),// row["column_name"].ToString() ?? string.Empty, // You can populate this from another query if needed
+                //CreateScript = $"ALTER TABLE \"{tableName}\" ADD CONSTRAINT {row["create_script"]};"
+            });
         }
 
-        return primaryKeyList;
+
+        return primaryKeys;
     }
 
     public async Task<List<ForeignKeyDefinition>> GetForeignKeysListAsync(string tableName)
@@ -195,7 +203,8 @@ public class SchemaFetcher
                     Name = group.Key ?? string.Empty,
                     Columns = group.Select(r => r["columnname"].ToString() ?? string.Empty).ToList(),
                     IsUnique = firstRow["is_unique"] != DBNull.Value && (bool)firstRow["is_unique"],
-                    IndexType = firstRow["index_type"]?.ToString() ?? string.Empty
+                    IndexType = firstRow["index_type"]?.ToString() ?? string.Empty,
+                    //CreateScript = firstRow["create_script"]?.ToString() ?? string.Empty
                 };
             });
 
@@ -227,6 +236,27 @@ public class SchemaFetcher
         return await ExecuteQueryAsync(query);
     }
 
+    public async Task<string?> GetIndexCreateScriptAsync(string indexName)
+    {
+        const string sql = @"
+        SELECT pg_get_indexdef(indexrelid) AS create_script
+        FROM pg_index idx
+        JOIN pg_class cls ON cls.oid = idx.indexrelid
+        WHERE cls.relname = @indexName
+        LIMIT 1;";
+
+        var parameters = new Dictionary<string, object>
+    {
+        { "@indexName", indexName }
+    };
+
+        var result = await ExecuteQueryAsync(sql, parameters);
+
+        return result.Rows.Count > 0
+            ? result.Rows[0]["create_script"]?.ToString()
+            : null;
+    }
+
     public async Task<DataTable> GetPrimaryKeysAsync(string tableName)
     {
         string query = @"
@@ -255,6 +285,30 @@ public class SchemaFetcher
         return await ExecuteQueryAsync(query, parameters);
     }
 
+    public async Task<string?> GetPrimaryKeyCreateScriptAsync(string tableName)
+    {
+        const string sql = @"
+        SELECT
+            'ALTER TABLE ""' || rel.relname || '"" ADD CONSTRAINT ""' || con.conname || '"" ' || 
+            pg_get_constraintdef(con.oid, true) || ';' AS create_script
+        FROM pg_constraint con
+        JOIN pg_class rel ON rel.oid = con.conrelid
+        WHERE con.contype = 'p'
+          AND rel.relname = @tableName
+          AND rel.relnamespace = 'public'::regnamespace
+        LIMIT 1;";
+
+        var parameters = new Dictionary<string, object>
+    {
+        { "@tableName", tableName }
+    };
+
+        var result = await ExecuteQueryAsync(sql, parameters);
+        return result.Rows.Count > 0
+            ? result.Rows[0]["create_script"]?.ToString()
+            : null;
+    }
+
     public async Task<DataTable> GetForeignKeysAsync(string tableName)
     {
         string query = $@"
@@ -272,6 +326,33 @@ public class SchemaFetcher
 
         return await ExecuteQueryAsync(query);
     }
+
+    public async Task<string?> GetForeignKeyCreateScriptAsync(string tableName, string foreignKeyName)
+    {
+        const string sql = @"
+    SELECT
+        'ALTER TABLE ""' || rel.relname || '"" ADD CONSTRAINT ""' || con.conname || '"" ' ||
+        pg_get_constraintdef(con.oid, true) || ';' AS create_script
+    FROM pg_constraint con
+    JOIN pg_class rel ON rel.oid = con.conrelid
+    WHERE con.contype = 'f'  -- 'f' means foreign key
+      AND rel.relname = @tableName
+      AND con.conname = @foreignKeyName
+      AND rel.relnamespace = 'public'::regnamespace
+    LIMIT 1;";
+
+        var parameters = new Dictionary<string, object>
+    {
+        { "@tableName", tableName },
+        { "@foreignKeyName", foreignKeyName }
+    };
+
+        var result = await ExecuteQueryAsync(sql, parameters);
+        return result.Rows.Count > 0
+            ? result.Rows[0]["create_script"]?.ToString()
+            : null;
+    }
+
 
     #endregion
 
@@ -416,7 +497,7 @@ public class SchemaFetcher
     {
         if (_logLevel >= level)
         {
-            _log?.Invoke(message);
+            _logger?.Invoke(0,0, message,false);
         }
     }
 
@@ -425,16 +506,16 @@ public class SchemaFetcher
     public async Task<DataTable> ExecuteQueryAsync(string query)
     {
         var result = await _connection.ExecuteQueryAsync(query);
-        //Log($"Query: {query}", LogLevel.Verbose);
-        //Log($"Rows returned: {result.Rows.Count}", LogLevel.Verbose);
+        Log($"Query: {query}", LogLevel.Verbose);
+        Log($"Rows returned: {result.Rows.Count}", LogLevel.Verbose);
         return result;
     }
 
     public async Task<DataTable> ExecuteQueryAsync(string query, Dictionary<string, object> parameters)
     {
         var result = await _connection.ExecuteQueryAsync(query, parameters);
-        //Log($"Query: {query}", LogLevel.Verbose);
-        //Log($"Rows returned: {result.Rows.Count}", LogLevel.Verbose);
+        Log($"Query: {query}", LogLevel.Verbose);
+        Log($"Rows returned: {result.Rows.Count}", LogLevel.Verbose);
         return result;
     }
 

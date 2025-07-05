@@ -10,7 +10,7 @@ public static class SchemaProviderFactory
     public static IDatabaseSchemaProvider Create(
     DbType dbType,
     string connectionString,
-    Action<string> logger,
+     Action<int, int, string, bool> logger,
     bool verbose = false,
     LogLevel logLevel = LogLevel.Basic)
     {

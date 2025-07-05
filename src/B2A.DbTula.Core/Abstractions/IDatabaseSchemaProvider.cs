@@ -1,13 +1,14 @@
 ﻿
 using B2A.DbTula.Core.Models;
+using System.Threading.Tasks;
 
 namespace B2a.DbTula.Core.Abstractions;
 
 public interface IDatabaseSchemaProvider
 {
-    Task<IList<TableDefinition>> GetTablesAsync();
+    Task<IList<string>> GetTablesAsync();
     Task<IList<ColumnDefinition>> GetColumnsAsync(string tableName);
-    Task<IList<string>> GetPrimaryKeysAsync(string tableName);
+    Task<IList<PrimaryKeyDefinition>> GetPrimaryKeysAsync(string tableName);
     Task<IList<ForeignKeyDefinition>> GetForeignKeysAsync(string tableName);
     Task<IList<IndexDefinition>> GetIndexesAsync(string tableName);
     Task<IList<DbFunctionDefinition>> GetFunctionsAsync();
@@ -16,4 +17,9 @@ public interface IDatabaseSchemaProvider
     Task<string> GetProcedureDefinitionAsync(string procedureName);
     Task<string> GetCreateTableScriptAsync(string tableName);
     Task<TableDefinition> GetTableDefinitionAsync(string tableName);
+    Task<string?> GetPrimaryKeyCreateScriptAsync(string tableName);
+    Task<string?> GetForeignKeyCreateScriptAsync(string tableName, string foreignKeyName);
+    Task<string?> GetIndexCreateScriptAsync(string indexName);
+
+
 }

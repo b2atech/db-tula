@@ -29,6 +29,11 @@ public class ColumnDefinition
     /// </summary>
     public bool IsComputed { get; set; } = false;
 
+    /// <summary>
+    /// Optional: Script to add this column (ALTER TABLE ... ADD COLUMN ...)
+    /// </summary>
+    public string? CreateScript { get; set; }
+
     public override bool Equals(object? obj)
     {
         if (obj is not ColumnDefinition other)
