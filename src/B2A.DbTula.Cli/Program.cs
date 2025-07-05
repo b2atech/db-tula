@@ -30,7 +30,7 @@ try
 
     var report = new SchemaComparisonReport
     {
-        Title = "Schema Comparison Report", // optional, or customize
+        Title = argsParsed.Title, // optional, or customize
         GeneratedOn = DateTime.UtcNow,
         Results = comparisonResults.ToList()
     };
