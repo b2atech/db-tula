@@ -33,7 +33,7 @@ jobs:
         run: dotnet restore src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj
 
       - name: Build CLI Tool
-        run: dotnet build src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj--configuration Release
+        run: dotnet build src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release
 
       - name: Run Schema Comparison for All DBs
         run: |
@@ -50,8 +50,8 @@ jobs:
             dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
               --source "$SOURCE_CONN" \
               --target "$TARGET_CONN" \
-              --test
-              --limit 5
+              --test \
+              --limit 5 \
               --out "gh-pages/${service}.html"
           done
 
