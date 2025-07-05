@@ -11,7 +11,7 @@ public static class LoggerHelpers
                 ? $"[{current}/{total}] {message}"
                 : message;
 
-            Console.WriteLine(logLine);
+            //Console.WriteLine(logLine);
             Log.Information(logLine);
         };
     }

@@ -156,7 +156,6 @@ public class SchemaComparer : ISchemaComparer
                 SubResults = subResults
             };
             results.Add(res);
-            Console.WriteLine(res.HasPrimaryKeyMismatch);
         }
 
         var sourceTableSet = new HashSet<string>(sourceTables, StringComparer.OrdinalIgnoreCase);
