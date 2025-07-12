@@ -21,9 +21,11 @@ public static class SchemaProviderFactory
                 logger,
                 verbose,
                 logLevel),
-
-            // DbType.MySql => new MySqlSchemaProvider(...), // when implemented
-
+           DbType.MySql => new MySqlSchemaProvider(
+                connectionString,
+                logger,
+                verbose,
+                logLevel),
             _ => throw new NotSupportedException($"Unsupported DB type: {dbType}")
         };
     }

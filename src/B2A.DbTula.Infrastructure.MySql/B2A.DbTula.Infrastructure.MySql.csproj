@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\B2A.DbTula.Core\B2A.DbTula.Core.csproj" />
+  </ItemGroup>
+
 </Project>
