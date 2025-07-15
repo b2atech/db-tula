@@ -22,7 +22,12 @@ jobs:
       - name: Extract version from Git tag
         id: get_version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/cli-v}
+          # Default version for manual runs or if no tag is present
+          VERSION="0.0.0-dev"
+          if [[ "${GITHUB_REF}" == refs/tags/cli-v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/cli-v}"
+          fi
+          echo "Using version: $VERSION"
           echo "NEW_VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Restore dependencies
