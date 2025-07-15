@@ -4,6 +4,15 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+		<PackageId>B2A.DbTula.Infrastructure.Postgres</PackageId>
+		<Version>1.0.0</Version>
+		<Authors>B2A Technologies</Authors>
+		<Company>B2A Technologies Pvt Ltd</Company>
+		<Description>PostgreSQL infrastructure provider for DBTula schema comparison engine.</Description>
+		<PackageTags>database;schema;comparison;postgres;infrastructure</PackageTags>
+		<RepositoryUrl>https://github.com/b2atech/db-tula</RepositoryUrl>
+		<!-- update -->
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>

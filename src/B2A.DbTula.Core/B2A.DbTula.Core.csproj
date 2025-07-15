@@ -4,6 +4,17 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+		<Authors>B2A Technologies</Authors>
+		<Company>B2A Technologies Pvt Ltd</Company>
+		<PackageId>B2A.DbTula.Core</PackageId>
+		<Version>1.0.0</Version>
+		<Authors>B2A Technologies</Authors>
+		<Description>Core API for DBTula database schema comparison. Supports Postgres/MySQL via infrastructure providers.</Description>
+		<PackageTags>database;schema;comparison;core</PackageTags>
+		<RepositoryUrl>https://github.com/b2atech/db-tula</RepositoryUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+		<!-- update -->
   </PropertyGroup>
 
 </Project>
