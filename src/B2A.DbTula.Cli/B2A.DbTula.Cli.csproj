@@ -7,7 +7,21 @@
     <Nullable>enable</Nullable>
 		<PreserveCompilationContext>true</PreserveCompilationContext>
 		<CopyRefAssembliesToPublishDirectory>true</CopyRefAssembliesToPublishDirectory>
-  </PropertyGroup>
+		<Authors>B2A Technologies</Authors>
+		<Company>B2A Technologies Pvt Ltd</Company>
+		<PackageId>B2A.DbTula.Cli</PackageId>
+		<Version>1.0.0</Version>
+		<Description>DBTula CLI tool for comparing database schemas (Postgres/MySQL).</Description>
+		<PackageTags>database;schema;comparison;cli;tool</PackageTags>
+		<RepositoryUrl>https://github.com/b2atech/db-tula</RepositoryUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+
+		<!-- Dotnet tool-specific settings -->
+		<PackAsTool>true</PackAsTool>
+		
+
+	</PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="RazorLight" Version="2.3.1" />

@@ -11,6 +11,8 @@
 		<Description>MySQL infrastructure provider for DBTula schema comparison engine.</Description>
 		<PackageTags>database;schema;comparison;mysql;infrastructure</PackageTags>
 		<RepositoryUrl>https://github.com/b2atech/db-tula</RepositoryUrl>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+
 		<!-- update -->
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>

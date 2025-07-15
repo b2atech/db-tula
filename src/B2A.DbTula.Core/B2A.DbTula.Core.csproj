@@ -13,6 +13,7 @@
 		<PackageTags>database;schema;comparison;core</PackageTags>
 		<RepositoryUrl>https://github.com/b2atech/db-tula</RepositoryUrl>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 
 		<!-- update -->
   </PropertyGroup>
