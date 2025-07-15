@@ -1,11 +1,7 @@
-using B2a.DbTula.Core;
 using B2a.DbTula.Core.Abstractions;
 using B2A.DbTula.Core.Enums;
 using B2A.DbTula.Core.Models;
 using B2A.DbTula.Infrastructure.Postgres;
-using Npgsql;
-using Serilog;
-using System.Data.Common;
 
 namespace B2a.DbTula.Infrastructure.Postgres;
 

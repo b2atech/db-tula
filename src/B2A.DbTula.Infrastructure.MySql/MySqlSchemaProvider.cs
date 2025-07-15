@@ -1,90 +1,132 @@
 ﻿using B2a.DbTula.Core.Abstractions;
 using B2A.DbTula.Core.Enums;
 using B2A.DbTula.Core.Models;
+using System.Data;
 
 namespace B2A.DbTula.Infrastructure.MySql
 {
     public class MySqlSchemaProvider : IDatabaseSchemaProvider
     {
-        //private readonly SchemaFetcher _fetcher;
-        //private readonly DatabaseConnection _connection;
+        private readonly SchemaFetcher _fetcher;
+        private readonly DatabaseConnection _connection;
+
         public MySqlSchemaProvider(
             string connectionString,
             Action<int, int, string, bool> logger,
             bool verbose,
             LogLevel logLevel = LogLevel.Basic)
         {
-            //_connection = new DatabaseConnection(connectionString, logger, verbose, logLevel);
-            //_fetcher = new SchemaFetcher(_connection, logger, verbose, logLevel);
-        }
-        Task<IList<ColumnDefinition>> IDatabaseSchemaProvider.GetColumnsAsync(string tableName)
-        {
-            throw new NotImplementedException();
+            _connection = new DatabaseConnection(connectionString, logger, verbose, logLevel);
+            _fetcher = new SchemaFetcher(_connection, logger, verbose, logLevel);
         }
 
-        Task<string> IDatabaseSchemaProvider.GetCreateTableScriptAsync(string tableName)
+        public async Task<IList<string>> GetTablesAsync()
         {
-            throw new NotImplementedException();
+            var tableRows = await _fetcher.GetTablesAsync();
+            var tableNames = new List<string>();
+
+            if (tableRows.Columns.Count == 0)
+                return tableNames;
+
+            var tableNameColumn = tableRows.Columns[0].ColumnName;
+
+            foreach (System.Data.DataRow row in tableRows.Rows)
+            {
+                var tableName = row[tableNameColumn]?.ToString();
+                if (!string.IsNullOrEmpty(tableName))
+                {
+                    tableNames.Add(tableName);
+                }
+            }
+
+            return tableNames;
         }
 
-        Task<string?> IDatabaseSchemaProvider.GetForeignKeyCreateScriptAsync(string tableName, string foreignKeyName)
+        public async Task<TableDefinition> GetTableDefinitionAsync(string tableName)
         {
-            throw new NotImplementedException();
+            return await _fetcher.GetTableDefinitionAsync(tableName);
         }
 
-        Task<IList<ForeignKeyDefinition>> IDatabaseSchemaProvider.GetForeignKeysAsync(string tableName)
+        public async Task<IList<ColumnDefinition>> GetColumnsAsync(string tableName)
         {
-            throw new NotImplementedException();
+            return await _fetcher.GetColumnsListAsync(tableName);
         }
 
-        Task<string> IDatabaseSchemaProvider.GetFunctionDefinitionAsync(string functionName)
+        public async Task<IList<PrimaryKeyDefinition>> GetPrimaryKeysAsync(string tableName)
         {
-            throw new NotImplementedException();
+            return await _fetcher.GetPrimaryKeysListAsync(tableName);
         }
 
-        Task<IList<DbFunctionDefinition>> IDatabaseSchemaProvider.GetFunctionsAsync()
+        public async Task<string?> GetPrimaryKeyCreateScriptAsync(string tableName)
         {
-            throw new NotImplementedException();
+            return await _fetcher.GetPrimaryKeyCreateScriptAsync(tableName);
         }
 
-        Task<string?> IDatabaseSchemaProvider.GetIndexCreateScriptAsync(string indexName)
+        public async Task<string?> GetForeignKeyCreateScriptAsync(string tableName, string foreignKeyName)
         {
-            throw new NotImplementedException();
+            return await _fetcher.GetForeignKeyCreateScriptAsync(tableName, foreignKeyName);
         }
 
-        Task<IList<IndexDefinition>> IDatabaseSchemaProvider.GetIndexesAsync(string tableName)
+        public async Task<IList<ForeignKeyDefinition>> GetForeignKeysAsync(string tableName)
         {
-            throw new NotImplementedException();
+            return await _fetcher.GetForeignKeysListAsync(tableName);
         }
 
-        Task<string?> IDatabaseSchemaProvider.GetPrimaryKeyCreateScriptAsync(string tableName)
+        public async Task<IList<IndexDefinition>> GetIndexesAsync(string tableName)
         {
-            throw new NotImplementedException();
+            return await _fetcher.GetIndexesListAsync(tableName);
         }
 
-        Task<IList<PrimaryKeyDefinition>> IDatabaseSchemaProvider.GetPrimaryKeysAsync(string tableName)
+        public async Task<string?> GetIndexCreateScriptAsync(string indexName)
         {
-            throw new NotImplementedException();
+            return await _fetcher.GetIndexDefinitionAsync(indexName);
         }
 
-        Task<string> IDatabaseSchemaProvider.GetProcedureDefinitionAsync(string procedureName)
+        public async Task<IList<DbFunctionDefinition>> GetFunctionsAsync()
         {
-            throw new NotImplementedException();
+            var table = await _fetcher.GetFunctionsAsync();
+            return ParseFunctionOrProcedureList(table);
         }
 
-        Task<IList<DbFunctionDefinition>> IDatabaseSchemaProvider.GetProceduresAsync()
+        public async Task<IList<DbFunctionDefinition>> GetProceduresAsync()
         {
-            throw new NotImplementedException();
+            var table = await _fetcher.GetProceduresAsync();
+            return ParseFunctionOrProcedureList(table);
         }
 
-        Task<TableDefinition> IDatabaseSchemaProvider.GetTableDefinitionAsync(string tableName)
+        public async Task<string> GetFunctionDefinitionAsync(string functionName)
         {
-            throw new NotImplementedException();
+            return await _fetcher.GetFunctionDefinitionAsync(functionName);
         }
 
-        Task<IList<string>> IDatabaseSchemaProvider.GetTablesAsync()
+        public async Task<string> GetProcedureDefinitionAsync(string procedureName)
         {
-            throw new NotImplementedException();
+            return await _fetcher.GetProcedureDefinitionAsync(procedureName);
         }
+
+        public async Task<string> GetCreateTableScriptAsync(string tableName)
+        {
+            return await _fetcher.GetCreateTableScriptAsync(tableName);
+        }
+
+        private List<DbFunctionDefinition> ParseFunctionOrProcedureList(DataTable table)
+        {
+            var list = new List<DbFunctionDefinition>();
+
+            foreach (DataRow row in table.Rows)
+            {
+                var name = row["ROUTINE_NAME"].ToString();
+
+                list.Add(new DbFunctionDefinition
+                {
+                    Name = name,
+                    Arguments = row["DTD_IDENTIFIER"]?.ToString(), // Not very useful in MySQL; may be null
+                    Definition = null // Set later using SHOW CREATE ...
+                });
+            }
+
+            return list;
+        }
+
     }
 }
