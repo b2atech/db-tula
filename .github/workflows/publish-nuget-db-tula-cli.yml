@@ -1,0 +1,53 @@
+name: Publish NuGet Package - DBTula.Cli
+
+on:
+  push:
+    tags:
+      - "cli-v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  build-pack-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Extract version from Git tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/cli-v}
+          echo "NEW_VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Restore dependencies
+        run: dotnet restore src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj
+
+      - name: Build the project
+        run: dotnet build src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-restore
+
+      - name: Pack the project with version
+        run: |
+          dotnet pack src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj \
+            --configuration Release \
+            --no-build \
+            --output ./nupkg \
+            /p:PackageVersion=${{ env.NEW_VERSION }}
+
+      - name: List package size (optional)
+        run: du -h ./nupkg/*.nupkg
+
+      - name: Publish to NuGet with retry
+        run: |
+          for i in {1..3}; do
+            dotnet nuget push ./nupkg/*.nupkg \
+              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate \
+              --timeout 600 && break || sleep 10
+          done
