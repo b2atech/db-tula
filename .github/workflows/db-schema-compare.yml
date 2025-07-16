@@ -90,6 +90,17 @@ jobs:
       - name: List generated reports (debug)
         run: ls -R gh-pages
 
+      - name: Ensure reports exist before deploy
+        run: |
+          if [ ! -d "gh-pages/qa-vs-prod" ] || [ -z "$(ls -A gh-pages/qa-vs-prod)" ]; then
+            echo "❌ No reports generated for QA vs PROD"
+            exit 1
+          fi
+          if [ ! -d "gh-pages/qa-vs-test" ] || [ -z "$(ls -A gh-pages/qa-vs-test)" ]; then
+            echo "❌ No reports generated for QA vs TEST"
+            exit 1
+          fi
+
       - name: Deploy Schema Reports to OVH (QA vs PROD and QA vs TEST)
         uses: appleboy/scp-action@v0.1.4
         with:
