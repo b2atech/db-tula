@@ -1,4 +1,4 @@
- name: DB Schema Comparison
+name: DB Schema Comparison
 
 on:
   schedule:
