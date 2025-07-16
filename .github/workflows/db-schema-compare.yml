@@ -2,8 +2,8 @@ name: DB Schema Comparison
 
 on:
   schedule:
-    - cron: '30 18 * * *'   # ⏰ Every day at midnight IST (18:30 UTC)
-  workflow_dispatch:        # 🖱️ Manual trigger support
+    - cron: '30 18 * * *'   # Every day at midnight IST (18:30 UTC)
+  workflow_dispatch:
 
 jobs:
   compare-schemas:
@@ -50,7 +50,6 @@ jobs:
 
           for service in "${services[@]}"; do
             echo "Comparing QA → PROD for $service..."
-
             SOURCE_CONN="Server=${QA_DB_HOST};Port=${QA_DB_PORT};Database=qa-dhanman-${service};User Id=${QA_DB_USER};Password=${QA_DB_PASSWORD};"
             TARGET_CONN="Server=${PROD_DB_HOST};Port=${PROD_DB_PORT};Database=prod-dhanman-${service};User Id=${PROD_DB_USER};Password=${PROD_DB_PASSWORD};"
 
@@ -68,7 +67,6 @@ jobs:
 
           for service in "${services[@]}"; do
             echo "Comparing QA → TEST for $service..."
-
             SOURCE_CONN="Server=${QA_DB_HOST};Port=${QA_DB_PORT};Database=qa-dhanman-${service};User Id=${QA_DB_USER};Password=${QA_DB_PASSWORD};"
             TARGET_CONN="Server=${TEST_DB_HOST};Port=${TEST_DB_PORT};Database=test-dhanman-${service};User Id=${TEST_DB_USER};Password=${TEST_DB_PASSWORD};"
 
@@ -79,6 +77,9 @@ jobs:
               --out "gh-pages/qa-vs-test/${service}.html"
           done
 
+      - name: List generated reports (debug)
+        run: ls -R gh-pages
+
       - name: Deploy Schema Reports to OVH (QA vs PROD and QA vs TEST)
         uses: appleboy/scp-action@v0.1.4
         with:
@@ -87,8 +88,8 @@ jobs:
           password: ${{ secrets.DO_PASSWORD }}
           port: 22
           source: |
-            gh-pages/qa-vs-prod/*.html
-            gh-pages/qa-vs-test/*.html
+            gh-pages/qa-vs-prod/
+            gh-pages/qa-vs-test/
           target: "/var/www/dbtula-site"
           strip_components: 1
           timeout: 30s
