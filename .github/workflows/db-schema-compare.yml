@@ -45,6 +45,8 @@ jobs:
 
       - name: Run Schema Comparison for QA vs PROD
         run: |
+          set -e
+          set -x
           services=("common" "community" "inventory" "payroll" "purchase" "sales")
           mkdir -p gh-pages/qa-vs-prod
 
@@ -52,6 +54,9 @@ jobs:
             echo "Comparing QA → PROD for $service..."
             SOURCE_CONN="Server=${QA_DB_HOST};Port=${QA_DB_PORT};Database=qa-dhanman-${service};User Id=${QA_DB_USER};Password=${QA_DB_PASSWORD};"
             TARGET_CONN="Server=${PROD_DB_HOST};Port=${PROD_DB_PORT};Database=prod-dhanman-${service};User Id=${PROD_DB_USER};Password=${PROD_DB_PASSWORD};"
+
+            echo "SOURCE_CONN=$SOURCE_CONN"
+            echo "TARGET_CONN=$TARGET_CONN"
 
             dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
               --source "$SOURCE_CONN" \
@@ -62,6 +67,8 @@ jobs:
 
       - name: Run Schema Comparison for QA vs TEST
         run: |
+          set -e
+          set -x
           services=("common" "community" "inventory" "payroll" "purchase" "sales")
           mkdir -p gh-pages/qa-vs-test
 
@@ -69,6 +76,9 @@ jobs:
             echo "Comparing QA → TEST for $service..."
             SOURCE_CONN="Server=${QA_DB_HOST};Port=${QA_DB_PORT};Database=qa-dhanman-${service};User Id=${QA_DB_USER};Password=${QA_DB_PASSWORD};"
             TARGET_CONN="Server=${TEST_DB_HOST};Port=${TEST_DB_PORT};Database=test-dhanman-${service};User Id=${TEST_DB_USER};Password=${TEST_DB_PASSWORD};"
+
+            echo "SOURCE_CONN=$SOURCE_CONN"
+            echo "TARGET_CONN=$TARGET_CONN"
 
             dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
               --source "$SOURCE_CONN" \
