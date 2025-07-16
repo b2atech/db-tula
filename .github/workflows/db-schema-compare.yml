@@ -1,4 +1,4 @@
-name: DB Schema Comparison
+ name: DB Schema Comparison
 
 on:
   schedule:
@@ -88,10 +88,11 @@ jobs:
           done
 
       - name: List generated reports (debug)
-        run: ls -R gh-pages
+        run: ls -R gh-pages || true
 
       - name: Ensure reports exist before deploy
         run: |
+          set -e
           if [ ! -d "gh-pages/qa-vs-prod" ] || [ -z "$(ls -A gh-pages/qa-vs-prod)" ]; then
             echo "❌ No reports generated for QA vs PROD"
             exit 1
