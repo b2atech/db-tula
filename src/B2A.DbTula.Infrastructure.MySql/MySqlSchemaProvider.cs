@@ -128,5 +128,54 @@ namespace B2A.DbTula.Infrastructure.MySql
             return list;
         }
 
+
+        #region Views
+        public async Task<IList<DbViewDefinition>> GetViewsAsync()
+        {
+            string query = "SELECT table_name AS VIEW_NAME FROM information_schema.views WHERE table_schema = DATABASE();";
+            var table = await _connection.ExecuteQueryAsync(query);
+
+            return table.AsEnumerable()
+                .Select(row => new DbViewDefinition
+                {
+                    Name = row["VIEW_NAME"].ToString(),
+                    Definition = null // Will fetch with SHOW CREATE VIEW
+                })
+                .ToList();
+        }
+
+        public async Task<string?> GetViewDefinitionAsync(string viewName)
+        {
+            string query = $"SHOW CREATE VIEW `{viewName}`;";
+            var result = await _connection.ExecuteQueryAsync(query);
+            return result.Rows.Count > 0 ? result.Rows[0]["Create View"].ToString() : null;
+        }
+        #endregion
+
+        #region Triggers
+        public async Task<IList<DbTriggerDefinition>> GetTriggersAsync()
+        {
+            string query = "SELECT TRIGGER_NAME, EVENT_MANIPULATION, EVENT_OBJECT_TABLE, ACTION_TIMING FROM information_schema.triggers WHERE trigger_schema = DATABASE();";
+            var table = await _connection.ExecuteQueryAsync(query);
+
+            return table.AsEnumerable()
+                .Select(row => new DbTriggerDefinition
+                {
+                    Name = row["TRIGGER_NAME"].ToString(),
+                    Event = row["EVENT_MANIPULATION"].ToString(),
+                    Table = row["EVENT_OBJECT_TABLE"].ToString(),
+                    Timing = row["ACTION_TIMING"].ToString(),
+                    Definition = null // Will fetch with SHOW CREATE TRIGGER
+                })
+                .ToList();
+        }
+
+        public async Task<string?> GetTriggerDefinitionAsync(string triggerName)
+        {
+            string query = $"SHOW CREATE TRIGGER `{triggerName}`;";
+            var result = await _connection.ExecuteQueryAsync(query);
+            return result.Rows.Count > 0 ? result.Rows[0]["SQL Original Statement"].ToString() : null;
+        }
+        #endregion
     }
 }
