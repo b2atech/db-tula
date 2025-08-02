@@ -15,6 +15,8 @@ public enum SchemaObjectType
     Index,
     Sequence,
     Function,
-    Procedure
+    Procedure,
+    View,
+    Trigger
 }
 

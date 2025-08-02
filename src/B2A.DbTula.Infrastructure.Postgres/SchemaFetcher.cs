@@ -63,6 +63,35 @@ public class SchemaFetcher
         return await ExecuteQueryAsync(query);
     }
 
+    public async Task<DataTable> GetViewsAsync()
+    {
+        var query = @"
+        SELECT 
+            table_name,
+            view_definition
+        FROM information_schema.views
+        WHERE table_schema = 'public';";
+        return await ExecuteQueryAsync(query);
+    }
+
+
+    public async Task<DataTable> GetTriggersAsync()
+    {
+        var query = @"
+        SELECT 
+            trg.tgname AS trigger_name,
+            tbl.relname AS table_name,
+            pg_get_triggerdef(trg.oid, true) AS definition
+        FROM pg_trigger trg
+        JOIN pg_class tbl ON tbl.oid = trg.tgrelid
+        JOIN pg_namespace ns ON ns.oid = tbl.relnamespace
+        WHERE ns.nspname = 'public'
+          AND NOT trg.tgisinternal;";
+        return await ExecuteQueryAsync(query);
+    }
+
+
+
     #endregion
 
     #region Get Details of a specific table
@@ -497,7 +526,7 @@ public class SchemaFetcher
     {
         if (_logLevel >= level)
         {
-            _logger?.Invoke(0,0, message,false);
+            _logger?.Invoke(0, 0, message, false);
         }
     }
 
@@ -518,6 +547,54 @@ public class SchemaFetcher
         Log($"Rows returned: {result.Rows.Count}", LogLevel.Verbose);
         return result;
     }
+
+    internal async Task<string?> GetViewDefinitionAsync(string viewName)
+    {
+        const string sql = @"
+        SELECT pg_get_viewdef(c.oid, true)
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relkind = 'v'
+          AND n.nspname = 'public'
+          AND c.relname = @viewName
+        LIMIT 1;";
+
+        var parameters = new Dictionary<string, object>
+    {
+        { "viewName", viewName }
+    };
+
+        var result = await _connection.ExecuteQueryAsync(sql, parameters);
+        if (result.Rows.Count > 0 && result.Rows[0][0] != DBNull.Value)
+            return result.Rows[0][0].ToString();
+
+        return null;
+    }
+
+
+    internal async Task<string?> GetTriggerDefinitionAsync(string triggerName)
+    {
+        const string sql = @"
+        SELECT pg_get_triggerdef(t.oid, true)
+        FROM pg_trigger t
+        JOIN pg_class c ON c.oid = t.tgrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE t.tgname = @triggerName
+          AND n.nspname = 'public'
+        LIMIT 1;";
+
+        var parameters = new Dictionary<string, object>
+    {
+        { "triggerName", triggerName }
+    };
+
+        var result = await _connection.ExecuteQueryAsync(sql, parameters);
+        if (result.Rows.Count > 0 && result.Rows[0][0] != DBNull.Value)
+            return result.Rows[0][0].ToString();
+
+        return null;
+    }
+
 
     #endregion
 

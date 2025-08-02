@@ -49,6 +49,28 @@ public class SchemaFetcher
         string query = "SELECT table_name FROM information_schema.tables WHERE table_name LIKE '%seq%' AND table_schema = DATABASE()";
         return await ExecuteQueryAsync(query);
     }
+
+
+    public async Task<DataTable> GetViewsAsync()
+    {
+        string query = "SHOW FULL TABLES WHERE Table_type = 'VIEW'";
+        return await ExecuteQueryAsync(query);
+    }
+
+    public async Task<DataTable> GetTriggersAsync()
+    {
+        string query = @"
+        SELECT 
+            TRIGGER_NAME, 
+            EVENT_MANIPULATION, 
+            EVENT_OBJECT_TABLE, 
+            ACTION_STATEMENT, 
+            ACTION_TIMING 
+        FROM INFORMATION_SCHEMA.TRIGGERS
+        WHERE TRIGGER_SCHEMA = DATABASE();";
+        return await ExecuteQueryAsync(query);
+    }
+
     #endregion
 
     #region Table Definition
@@ -209,6 +231,19 @@ public class SchemaFetcher
         return fkLine != null
             ? $"ALTER TABLE `{tableName}` ADD {fkLine.Trim().TrimEnd(',')};"
             : null;
+    }
+
+  
+    public async Task<string?> GetTriggerDefinitionAsync(string triggerName)
+    {
+        string query = $"SHOW CREATE TRIGGER `{triggerName}`;";
+        var result = await ExecuteQueryAsync(query);
+        if (result.Rows.Count == 0) return null;
+        // find column: prefer "SQL Original Statement" or anything with "Create" or "SQL"
+        var colName = result.Columns.Cast<DataColumn>()
+            .Select(c => c.ColumnName)
+            .FirstOrDefault(n => n.Contains("SQL", StringComparison.OrdinalIgnoreCase) || n.Contains("Create", StringComparison.OrdinalIgnoreCase));
+        return colName != null ? result.Rows[0][colName].ToString() : null;
     }
 
     #endregion

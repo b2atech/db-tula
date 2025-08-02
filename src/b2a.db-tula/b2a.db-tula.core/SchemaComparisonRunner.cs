@@ -96,6 +96,46 @@ namespace b2a.db_tula.core
             }
 
 
+            // ---- Views ----
+            var sourceViews = await _source.GetViewsAsync();
+            var targetViews = await _target.GetViewsAsync();
+            report.ViewResults = _comparer.CompareViews(
+                _source, _target, sourceViews, targetViews,
+                (i, total, viewName) => log($"Views compared: {i}/{total} - {viewName}", LogLevel.Basic)
+            );
+
+            foreach (var item in report.ViewResults.Where(i => i.Comparison.NeedsSync()))
+            {
+                item.SyncScript = await GenerateScriptWithCommentAsync(
+                    "View",
+                    item.Comparison,
+                    item.SourceName,
+                    () => _source.GetViewDefinitionAsync(item.SourceName),
+                    () => _target.GetViewDefinitionAsync(item.DestinationName),
+                    _syncer.GenerateSyncCommands
+                );
+            }
+
+            // ---- Triggers ----
+            var sourceTriggers = await _source.GetTriggersAsync();
+            var targetTriggers = await _target.GetTriggersAsync();
+            report.TriggerResults = _comparer.CompareTriggers(
+                _source, _target, sourceTriggers, targetTriggers,
+                (i, total, trigName) => log($"Triggers compared: {i}/{total} - {trigName}", LogLevel.Basic)
+            );
+
+            // Optionally generate sync scripts for triggers
+            foreach (var item in report.TriggerResults.Where(i => i.Comparison.NeedsSync()))
+            {
+                item.SyncScript = await GenerateScriptWithCommentAsync(
+                    "Trigger",
+                    item.Comparison,
+                    item.SourceName,
+                    () => _source.GetTriggerDefinitionAsync(item.SourceName),
+                    () => _target.GetTriggerDefinitionAsync(item.DestinationName),
+                    _syncer.GenerateSyncCommands
+                );
+            }
 
 
 

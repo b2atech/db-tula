@@ -2,6 +2,7 @@ using B2a.DbTula.Core.Abstractions;
 using B2A.DbTula.Core.Enums;
 using B2A.DbTula.Core.Models;
 using B2A.DbTula.Infrastructure.Postgres;
+using System.Data;
 
 namespace B2a.DbTula.Infrastructure.Postgres;
 
@@ -117,5 +118,72 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
 
         return list;
     }
+
+    public async Task<string?> GetViewDefinitionAsync(string viewName)
+    {
+        return await _fetcher.GetViewDefinitionAsync(viewName);
+    }
+
+    public async Task<string?> GetTriggerDefinitionAsync(string viewName)
+    {
+        return await _fetcher.GetTriggerDefinitionAsync(viewName);
+    }
+
+    public async Task<IList<DbViewDefinition>> GetViewsAsync()
+    {
+        const string sql = @"
+        SELECT 
+            table_name AS view_name, 
+            view_definition 
+        FROM information_schema.views 
+        WHERE table_schema = 'public';
+    ";
+
+        var dataTable = await _connection.ExecuteQueryAsync(sql);
+        var list = new List<DbViewDefinition>();
+
+        foreach (DataRow row in dataTable.Rows)
+        {
+            list.Add(new DbViewDefinition
+            {
+                Name = row["view_name"].ToString(),
+                Definition = row["view_definition"]?.ToString()
+            });
+        }
+
+        return list;
+    }
+
+    public async Task<IList<DbTriggerDefinition>> GetTriggersAsync()
+    {
+        const string sql = @"
+        SELECT 
+            trg.tgname AS trigger_name,
+            tbl.relname AS table_name,
+            pg_get_triggerdef(trg.oid, true) AS definition
+        FROM pg_trigger trg
+        JOIN pg_class tbl ON tbl.oid = trg.tgrelid
+        JOIN pg_namespace ns ON ns.oid = tbl.relnamespace
+        WHERE ns.nspname = 'public'
+          AND NOT trg.tgisinternal;
+    ";
+
+        var dataTable = await _connection.ExecuteQueryAsync(sql);
+        var list = new List<DbTriggerDefinition>();
+
+        foreach (DataRow row in dataTable.Rows)
+        {
+            list.Add(new DbTriggerDefinition
+            {
+                Name = row["trigger_name"].ToString(),
+                Table = row["table_name"].ToString(),
+                Definition = row["definition"]?.ToString()
+            });
+        }
+
+        return list;
+    }
+
 }
+
 

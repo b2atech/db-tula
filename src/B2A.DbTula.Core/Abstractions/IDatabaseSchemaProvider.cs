@@ -20,6 +20,9 @@ public interface IDatabaseSchemaProvider
     Task<string?> GetPrimaryKeyCreateScriptAsync(string tableName);
     Task<string?> GetForeignKeyCreateScriptAsync(string tableName, string foreignKeyName);
     Task<string?> GetIndexCreateScriptAsync(string indexName);
-
+    Task<IList<DbViewDefinition>> GetViewsAsync();
+    Task<string> GetViewDefinitionAsync(string viewName);
+    Task<IList<DbTriggerDefinition>> GetTriggersAsync();
+    Task<string> GetTriggerDefinitionAsync(string triggerName);
 
 }
