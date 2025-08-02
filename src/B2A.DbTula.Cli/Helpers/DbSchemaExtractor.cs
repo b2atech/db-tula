@@ -1,8 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using B2a.DbTula.Core.Abstractions;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
-using B2a.DbTula.Core.Abstractions;
 
 namespace B2A.DbTula.Cli.Helpers
 {
@@ -170,8 +172,13 @@ namespace B2A.DbTula.Cli.Helpers
                             else
                             {
                                 // Others use a hash of their SQL as filename
-                                var hash = obj.Sql != null ? obj.Sql.GetHashCode().ToString("x") : $"alt_{index}.sql";
-                                fileName = Path.Combine(nameDir, $"{hash}.sql");
+                                string sql = obj.Sql ?? "";
+                                using (var sha256 = SHA256.Create())
+                                {
+                                    var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(sql));
+                                    var hash = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
+                                    fileName = Path.Combine(nameDir, $"{hash}.sql");
+                                }
                             }
                             File.WriteAllText(fileName, obj.Sql ?? string.Empty);
                             progressLogger?.Invoke($"📝 Wrote {fileName}");
