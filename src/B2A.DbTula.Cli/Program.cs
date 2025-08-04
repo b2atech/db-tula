@@ -42,8 +42,7 @@ internal class Program
 
                 var extractor = new DbSchemaExtractor(provider);
 
-                var types = argsParsed.ExtractObjects
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                var types = argsParsed.ExtractObjectTypes;
 
                 // Use logging in extraction
                 var objects = await extractor.ExtractAllAsync(

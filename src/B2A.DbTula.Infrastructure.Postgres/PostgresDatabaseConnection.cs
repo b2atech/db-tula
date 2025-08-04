@@ -1,5 +1,4 @@
 ﻿using B2A.DbTula.Core.Abstractions;
-using Serilog;
 using Npgsql;
 using System.Data;
 using Microsoft.Extensions.Logging;

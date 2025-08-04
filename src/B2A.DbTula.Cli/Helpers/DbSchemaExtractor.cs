@@ -1,17 +1,13 @@
 ﻿using B2a.DbTula.Core.Abstractions;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace B2A.DbTula.Cli.Helpers
 {
     public class ExtractedDbObject
     {
         public string Name { get; set; }
-        public string Type { get; set; } // Function, Procedure, View, Trigger
+        public string Type { get; set; } 
         public string Sql { get; set; }
     }
 
@@ -23,17 +19,13 @@ namespace B2A.DbTula.Cli.Helpers
         {
             _provider = provider;
         }
-
-        /// <summary>
-        /// Extracts all supported object types, with progress logging.
-        /// </summary>
         public async Task<List<ExtractedDbObject>> ExtractAllAsync(
      IEnumerable<string>? objectTypes = null,
      int? limit = null,
      Action<string>? progressLogger = null)
         {
             var extracted = new List<ExtractedDbObject>();
-            objectTypes ??= new[] { "functions", "procedures", "views", "triggers" };
+            objectTypes ??= new[] { "functions", "procedures", "views", "triggers", "tables" };
 
             progressLogger?.Invoke("🔍 Starting extraction...");
 
@@ -77,8 +69,6 @@ namespace B2A.DbTula.Cli.Helpers
                 progressLogger?.Invoke($"✅ Extracted {procs.Count} procedures.");
             }
 
-            // Uncomment and implement if your provider supports views/triggers
-            /*
             if (objectTypes.Contains("views"))
             {
                 progressLogger?.Invoke("👁 Extracting views...");
@@ -118,7 +108,35 @@ namespace B2A.DbTula.Cli.Helpers
                 }
                 progressLogger?.Invoke($"✅ Extracted {triggers.Count} triggers.");
             }
-            */
+
+            if (objectTypes.Contains("tables"))
+            {
+                progressLogger?.Invoke("📦 Extracting tables...");
+                var tables = await _provider.GetTablesAsync();
+                if (limit.HasValue) tables = tables.Take(limit.Value).ToList();
+
+                foreach (var table in tables)
+                {
+                    var tableDef = await _provider.GetTableDefinitionAsync(table);
+                    if (tableDef?.CreateScript == null)
+                    {
+                        progressLogger?.Invoke($"⚠️ No script for table: {table}");
+                        continue;
+                    }
+                    extracted.Add(new ExtractedDbObject
+                    {
+                        Name = tableDef.Name,
+                        Type = "Table",
+                        Sql = tableDef.CreateScript
+                    });
+
+                    progressLogger?.Invoke($"   📝 Extracted table: {tableDef.Name}");
+                }
+
+                progressLogger?.Invoke($"✅ Extracted {tables.Count} tables.");
+            }
+
+
 
             progressLogger?.Invoke("✅ Extraction completed.");
             return extracted;

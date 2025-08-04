@@ -30,7 +30,7 @@ public class CliOptions
 
     public IEnumerable<string> ExtractObjectTypes =>
         ExtractObjects == "all"
-            ? new[] { "functions", "procedures", "views", "triggers", "tables" }
+        ? new[] { "functions", "procedures", "views", "triggers", "tables" }
             : ExtractObjects.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     public static CliOptions Parse(string[] args)

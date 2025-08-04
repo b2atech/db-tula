@@ -1,6 +1,5 @@
 ﻿
 using B2A.DbTula.Core.Models;
-using System.Threading.Tasks;
 
 namespace B2a.DbTula.Core.Abstractions;
 
