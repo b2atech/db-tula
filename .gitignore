@@ -1,24 +1,25 @@
-﻿################################################################################
-# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
-################################################################################
+# Ignore all bin and obj folders anywhere in the repo
+**/bin/
+**/obj/
 
-/src/b2a.db-tula/.vs/b2a.db-tula
-/src/b2a.db-tula/b2a.db-tula/bin/Debug/net8.0-windows
-/src/b2a.db-tula/b2a.db-tula/obj
-/src/b2a.db-tula/.vs/ProjectEvaluation
-/src/b2a.db-tula/b2a.db-tula/bin/Release/net8.0-windows/win-x64
-/src/b2a.db-tula/b2a.db-tula.cli/bin/Debug/net9.0
-/src/b2a.db-tula/b2a.db-tula.cli/obj
-/src/b2a.db-tula/b2a.db-tula.core/bin/Debug/net9.0
-/src/b2a.db-tula/b2a.db-tula.core/obj
-/src/B2A.DbTula.Infrastructure.MySql/bin/Debug/net9.0
-/src/B2A.DbTula.Infrastructure.MySql/obj/Debug/net9.0
-/src/B2A.DbTula.Infrastructure.MySql/obj
-/src/B2A.DbTula.Infrastructure.Postgres/obj
-/src/B2A.DbTula.Infrastructure.Postgres/bin/Debug/net9.0
-/src/B2A.DbTula.Core/bin/Debug/net9.0
-/src/B2A.DbTula.Core/obj
-/src/B2A.DbTula.Cli/bin/Debug/net9.0
-/src/B2A.DbTula.Cli/obj
-/src/B2A.DbTula.Cli/Properties/launchSettings.json
-/src/b2a.db-tula/b2a.db-tula.zip
+# Visual Studio cache
+.vs/
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider/JetBrains
+.idea/
+*.sln.iml
+
+# NuGet packages
+*.nupkg
+
+# Misc
+*.dll
+*.exe
+*.pdb
+*.cache
+*.config
+*.log
+TestResult*/
