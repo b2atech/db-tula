@@ -62,7 +62,8 @@ jobs:
               --source "$SOURCE_CONN" \
               --target "$TARGET_CONN" \
               --title "${service} Schema Comparison Report (QA vs PROD)" \
-              --out "gh-pages/qa-vs-prod/${service}.html"
+              --out "gh-pages/qa-vs-prod/${service}.html" \
+              --test --limit 10
           done
 
       - name: Run Schema Comparison for QA vs TEST
@@ -84,7 +85,8 @@ jobs:
               --source "$SOURCE_CONN" \
               --target "$TARGET_CONN" \
               --title "${service} Schema Comparison Report (QA vs TEST)" \
-              --out "gh-pages/qa-vs-test/${service}.html"
+              --out "gh-pages/qa-vs-test/${service}.html" \
+              --test --limit 10
           done
 
       - name: List generated reports (debug)
