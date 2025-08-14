@@ -22,3 +22,8 @@
 /src/B2A.DbTula.Cli/obj
 /src/B2A.DbTula.Cli/Properties/launchSettings.json
 /src/b2a.db-tula/b2a.db-tula.zip
+
+# Add common .NET build artifacts
+bin/
+obj/
+*.log

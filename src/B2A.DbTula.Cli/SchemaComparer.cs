@@ -174,15 +174,21 @@ public class SchemaComparer : ISchemaComparer
             var subResults = new List<ComparisonSubResult>();
             var overallStatus = ComparisonStatus.Match;
 
-            if (!AreScriptsEqual(source.CreateScript, target.CreateScript))
+            // First check: Use structural signature for semantic comparison (order-independent)
+            if (!source.StructuralEquals(target))
             {
                 overallStatus = ComparisonStatus.Mismatch;
-                subResults.Add(new ComparisonSubResult(
-                    "CreateScript",
-                    ComparisonStatus.Mismatch,
-                    "Create script differs",
-                    $"-- SOURCE\n{source.CreateScript}\n\n-- TARGET\n{target.CreateScript}"
-                ));
+                
+                // Only add script comparison as supplementary info if structural differs
+                if (!AreScriptsEqual(source.CreateScript, target.CreateScript))
+                {
+                    subResults.Add(new ComparisonSubResult(
+                        "StructuralDiff",
+                        ComparisonStatus.Mismatch,
+                        "Table structure differs (order-independent semantic comparison)",
+                        $"-- SOURCE SIGNATURE\n{source.GetStructuralSignature()}\n\n-- TARGET SIGNATURE\n{target.GetStructuralSignature()}\n\n-- SOURCE SCRIPT\n{source.CreateScript}\n\n-- TARGET SCRIPT\n{target.CreateScript}"
+                    ));
+                }
             }
 
             overallStatus |= await ComparePrimaryKeysAsync(sourceProvider, targetProvider, source, target, subResults);
@@ -224,14 +230,29 @@ public class SchemaComparer : ISchemaComparer
         if (sourcePk == null && targetPk != null)
         {
             var script = await targetProvider.GetPrimaryKeyCreateScriptAsync(target.Name);
-            subResults.Add(new("PrimaryKeys", ComparisonStatus.MissingInSource, $"Primary key missing in source: {targetPk.Name}", script));
+            subResults.Add(new("PrimaryKeys", ComparisonStatus.MissingInSource, 
+                $"Primary key missing in source: columns ({string.Join(", ", targetPk.Columns)})", script ?? ""));
             return ComparisonStatus.Mismatch;
         }
         else if (targetPk == null && sourcePk != null)
         {
             var script = await sourceProvider.GetPrimaryKeyCreateScriptAsync(source.Name);
-            subResults.Add(new("PrimaryKeys", ComparisonStatus.MissingInTarget, $"Primary key missing in target: {sourcePk.Name}", script));
+            subResults.Add(new("PrimaryKeys", ComparisonStatus.MissingInTarget, 
+                $"Primary key missing in target: columns ({string.Join(", ", sourcePk.Columns)})", script ?? ""));
             return ComparisonStatus.Mismatch;
+        }
+        else if (sourcePk != null && targetPk != null)
+        {
+            // Compare by structural definition (column list), not by name
+            if (!sourcePk.StructuralEquals(targetPk))
+            {
+                var sourceScript = await sourceProvider.GetPrimaryKeyCreateScriptAsync(source.Name);
+                var targetScript = await targetProvider.GetPrimaryKeyCreateScriptAsync(target.Name);
+                subResults.Add(new("PrimaryKeys", ComparisonStatus.Mismatch, 
+                    $"Primary key structure differs: source({string.Join(", ", sourcePk.Columns)}) vs target({string.Join(", ", targetPk.Columns)})", 
+                    $"-- SOURCE PK\n{sourceScript}\n\n-- TARGET PK\n{targetScript}"));
+                return ComparisonStatus.Mismatch;
+            }
         }
 
         return ComparisonStatus.Match;
@@ -281,53 +302,49 @@ public class SchemaComparer : ISchemaComparer
     {
         var status = ComparisonStatus.Match;
 
-        var sourceFksByName = source.ForeignKeys
-            .GroupBy(fk => fk.Name, StringComparer.OrdinalIgnoreCase)
+        // Group FKs by structural key to avoid double-counting and enable semantic comparison
+        var sourceFksByStructure = source.ForeignKeys
+            .GroupBy(fk => fk.GetStructuralKey(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-        var targetFksByName = target.ForeignKeys
-            .GroupBy(fk => fk.Name, StringComparer.OrdinalIgnoreCase)
+        var targetFksByStructure = target.ForeignKeys
+            .GroupBy(fk => fk.GetStructuralKey(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-        var allFkNames = sourceFksByName.Keys.Union(targetFksByName.Keys, StringComparer.OrdinalIgnoreCase);
+        var allFkStructures = sourceFksByStructure.Keys.Union(targetFksByStructure.Keys, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var fkName in allFkNames)
+        foreach (var structuralKey in allFkStructures)
         {
-            var inSource = sourceFksByName.TryGetValue(fkName, out var sourceFk);
-            var inTarget = targetFksByName.TryGetValue(fkName, out var targetFk);
+            var inSource = sourceFksByStructure.TryGetValue(structuralKey, out var sourceFk);
+            var inTarget = targetFksByStructure.TryGetValue(structuralKey, out var targetFk);
 
             if (inSource && inTarget)
             {
-                if (!ForeignKeyEquals(sourceFk, targetFk))
+                // Already structurally equal by grouping key, but check for any additional differences
+                if (!sourceFk!.StructuralEquals(targetFk!))
                 {
                     var script = await sourceProvider.GetForeignKeyCreateScriptAsync(source.Name, sourceFk.Name);
-                    subResults.Add(new("ForeignKeys", ComparisonStatus.Mismatch, $"Foreign key '{fkName}' differs between source and target", script));
+                    subResults.Add(new("ForeignKeys", ComparisonStatus.Mismatch, 
+                        $"Foreign key structure '{structuralKey}' has differences", script ?? ""));
                     status = ComparisonStatus.Mismatch;
                 }
             }
             else if (inSource && !inTarget)
             {
-                var script = await sourceProvider.GetForeignKeyCreateScriptAsync(source.Name, sourceFk.Name);
-                subResults.Add(new("ForeignKeys", ComparisonStatus.MissingInTarget, $"Foreign key '{fkName}' missing in target", script));
+                var script = await sourceProvider.GetForeignKeyCreateScriptAsync(source.Name, sourceFk!.Name);
+                subResults.Add(new("ForeignKeys", ComparisonStatus.MissingInTarget, 
+                    $"Foreign key '{structuralKey}' missing in target", script ?? ""));
                 status = ComparisonStatus.Mismatch;
             }
             else if (!inSource && inTarget)
             {
-                var script = await targetProvider.GetForeignKeyCreateScriptAsync(target.Name, targetFk.Name);
-                subResults.Add(new("ForeignKeys", ComparisonStatus.MissingInSource, $"Foreign key '{fkName}' missing in source", script));
+                var script = await targetProvider.GetForeignKeyCreateScriptAsync(target.Name, targetFk!.Name);
+                subResults.Add(new("ForeignKeys", ComparisonStatus.MissingInSource, 
+                    $"Foreign key '{structuralKey}' missing in source", script ?? ""));
                 status = ComparisonStatus.Mismatch;
             }
         }
         return status;
-    }
-
-    private static bool ForeignKeyEquals(ForeignKeyDefinition a, ForeignKeyDefinition b)
-    {
-        return
-            string.Equals(a.Name, b.Name, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(a.ColumnName, b.ColumnName, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(a.ReferencedTable, b.ReferencedTable, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(a.ReferencedColumn, b.ReferencedColumn, StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<ComparisonStatus> CompareIndexesAsync(
@@ -338,24 +355,49 @@ public class SchemaComparer : ISchemaComparer
         List<ComparisonSubResult> subResults)
     {
         var status = ComparisonStatus.Match;
-        var sourceIndexes = source.Indexes.ToDictionary(i => i.Name, StringComparer.OrdinalIgnoreCase);
-        var targetIndexes = target.Indexes.ToDictionary(i => i.Name, StringComparer.OrdinalIgnoreCase);
+        
+        // Group indexes by structural key to enable semantic comparison (method + columns + options + predicate)
+        var sourceIndexesByStructure = source.Indexes
+            .GroupBy(idx => idx.GetStructuralKey(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var index in sourceIndexes.Values.Where(i => !targetIndexes.ContainsKey(i.Name)))
-        {
-            var script = await sourceProvider.GetIndexCreateScriptAsync(index.Name);
-            subResults.Add(new("Indexes", ComparisonStatus.MissingInTarget,
-                $"Index '{index.Name}' is missing in target.", script));
-            status = ComparisonStatus.Mismatch;
-        }
+        var targetIndexesByStructure = target.Indexes
+            .GroupBy(idx => idx.GetStructuralKey(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var index in targetIndexes.Values.Where(i => !sourceIndexes.ContainsKey(i.Name)))
+        var allIndexStructures = sourceIndexesByStructure.Keys.Union(targetIndexesByStructure.Keys, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var structuralKey in allIndexStructures)
         {
-            var script = await targetProvider.GetIndexCreateScriptAsync(index.Name);
-            subResults.Add(new("Indexes", ComparisonStatus.MissingInSource,
-                $"Index '{index.Name}' exists in target but not in source.",
-                $"-- Optionally drop: DROP INDEX IF EXISTS \"{index.Name}\";"));
-            status = ComparisonStatus.Mismatch;
+            var inSource = sourceIndexesByStructure.TryGetValue(structuralKey, out var sourceIndex);
+            var inTarget = targetIndexesByStructure.TryGetValue(structuralKey, out var targetIndex);
+
+            if (inSource && inTarget)
+            {
+                // Already structurally equal by grouping key, but verify
+                if (!sourceIndex!.StructuralEquals(targetIndex!))
+                {
+                    var script = await sourceProvider.GetIndexCreateScriptAsync(sourceIndex.Name);
+                    subResults.Add(new("Indexes", ComparisonStatus.Mismatch,
+                        $"Index structure '{structuralKey}' has subtle differences", script ?? ""));
+                    status = ComparisonStatus.Mismatch;
+                }
+            }
+            else if (inSource && !inTarget)
+            {
+                var script = await sourceProvider.GetIndexCreateScriptAsync(sourceIndex!.Name);
+                subResults.Add(new("Indexes", ComparisonStatus.MissingInTarget,
+                    $"Index '{structuralKey}' is missing in target.", script ?? ""));
+                status = ComparisonStatus.Mismatch;
+            }
+            else if (!inSource && inTarget)
+            {
+                var script = await targetProvider.GetIndexCreateScriptAsync(targetIndex!.Name);
+                subResults.Add(new("Indexes", ComparisonStatus.MissingInSource,
+                    $"Index '{structuralKey}' exists in target but not in source.",
+                    $"-- Optionally drop: DROP INDEX IF EXISTS \"{targetIndex.Name}\";"));
+                status = ComparisonStatus.Mismatch;
+            }
         }
 
         return status;
