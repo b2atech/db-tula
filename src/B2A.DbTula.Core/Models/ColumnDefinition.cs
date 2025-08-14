@@ -30,6 +30,11 @@ public class ColumnDefinition
     public bool IsComputed { get; set; } = false;
 
     /// <summary>
+    /// True if this column is an identity/auto-increment column
+    /// </summary>
+    public bool IsIdentity { get; set; } = false;
+
+    /// <summary>
     /// Optional: Script to add this column (ALTER TABLE ... ADD COLUMN ...)
     /// </summary>
     public string? CreateScript { get; set; }
@@ -44,11 +49,12 @@ public class ColumnDefinition
             && IsNullable == other.IsNullable
             && Length == other.Length
             && string.Equals(DefaultValue ?? "", other.DefaultValue ?? "", StringComparison.OrdinalIgnoreCase)
-            && IsComputed == other.IsComputed;
+            && IsComputed == other.IsComputed
+            && IsIdentity == other.IsIdentity;
     }
 
     public override int GetHashCode()
     {
-        return HashCode.Combine(Name.ToLower(), DataType.ToLower(), IsNullable, Length, DefaultValue?.ToLower(), IsComputed);
+        return HashCode.Combine(Name.ToLower(), DataType.ToLower(), IsNullable, Length, DefaultValue?.ToLower(), IsComputed, IsIdentity);
     }
 }

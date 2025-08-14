@@ -15,4 +15,22 @@ public class PrimaryKeyDefinition
 
     // Optional: Full CREATE or ALTER TABLE script to add this PK
     public string? CreateScript { get; set; }
+
+    /// <summary>
+    /// Gets the structural key for semantic comparison (independent of PK name)
+    /// </summary>
+    public string GetStructuralKey()
+    {
+        return string.Join(",", Columns.Select(c => c.ToLower()));
+    }
+
+    /// <summary>
+    /// Compares PKs by structure (column list), not by name
+    /// </summary>
+    public bool StructuralEquals(PrimaryKeyDefinition other)
+    {
+        if (other == null) return false;
+        
+        return Columns.SequenceEqual(other.Columns, StringComparer.OrdinalIgnoreCase);
+    }
 }
