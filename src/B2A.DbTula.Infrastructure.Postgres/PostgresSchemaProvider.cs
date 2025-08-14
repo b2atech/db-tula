@@ -110,7 +110,7 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
         {
             list.Add(new DbFunctionDefinition
             {
-                Name = row["routine_name"].ToString(),
+                Name = row["routine_name"]?.ToString() ?? string.Empty,
                 Arguments = row["arguments"]?.ToString(),
                 Definition = row["definition"]?.ToString(),
             });
@@ -175,8 +175,8 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
         {
             list.Add(new DbTriggerDefinition
             {
-                Name = row["trigger_name"].ToString(),
-                Table = row["table_name"].ToString(),
+                Name = row["trigger_name"]?.ToString() ?? string.Empty,
+                Table = row["table_name"]?.ToString() ?? string.Empty,
                 Definition = row["definition"]?.ToString()
             });
         }

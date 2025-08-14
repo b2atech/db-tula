@@ -7,7 +7,7 @@ namespace B2A.DbTula.Infrastructure.Postgres;
 public class DatabaseConnection
 {
     private readonly string _connectionString;
-    private readonly Action<int, int, string, bool> _logger;
+    private readonly Action<int, int, string, bool>? _logger;
     private readonly bool _verbose;
     private readonly LogLevel _logLevel;
 
