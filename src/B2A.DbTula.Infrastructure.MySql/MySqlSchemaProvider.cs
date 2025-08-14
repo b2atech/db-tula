@@ -96,17 +96,17 @@ namespace B2A.DbTula.Infrastructure.MySql
 
         public async Task<string> GetFunctionDefinitionAsync(string functionName)
         {
-            return await _fetcher.GetFunctionDefinitionAsync(functionName);
+            return await _fetcher.GetFunctionDefinitionAsync(functionName) ?? string.Empty;
         }
 
         public async Task<string> GetProcedureDefinitionAsync(string procedureName)
         {
-            return await _fetcher.GetProcedureDefinitionAsync(procedureName);
+            return await _fetcher.GetProcedureDefinitionAsync(procedureName) ?? string.Empty;
         }
 
         public async Task<string> GetCreateTableScriptAsync(string tableName)
         {
-            return await _fetcher.GetCreateTableScriptAsync(tableName);
+            return await _fetcher.GetCreateTableScriptAsync(tableName) ?? string.Empty;
         }
 
         private List<DbFunctionDefinition> ParseFunctionOrProcedureList(DataTable table)
@@ -144,11 +144,11 @@ namespace B2A.DbTula.Infrastructure.MySql
                 .ToList();
         }
 
-        public async Task<string?> GetViewDefinitionAsync(string viewName)
+        public async Task<string> GetViewDefinitionAsync(string viewName)
         {
             string query = $"SHOW CREATE VIEW `{viewName}`;";
             var result = await _connection.ExecuteQueryAsync(query);
-            return result.Rows.Count > 0 ? result.Rows[0]["Create View"].ToString() : null;
+            return result.Rows.Count > 0 ? result.Rows[0]["Create View"]?.ToString() ?? string.Empty : string.Empty;
         }
         #endregion
 
@@ -170,11 +170,11 @@ namespace B2A.DbTula.Infrastructure.MySql
                 .ToList();
         }
 
-        public async Task<string?> GetTriggerDefinitionAsync(string triggerName)
+        public async Task<string> GetTriggerDefinitionAsync(string triggerName)
         {
             string query = $"SHOW CREATE TRIGGER `{triggerName}`;";
             var result = await _connection.ExecuteQueryAsync(query);
-            return result.Rows.Count > 0 ? result.Rows[0]["SQL Original Statement"].ToString() : null;
+            return result.Rows.Count > 0 ? result.Rows[0]["SQL Original Statement"]?.ToString() ?? string.Empty : string.Empty;
         }
         #endregion
     }
