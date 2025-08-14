@@ -1,6 +1,6 @@
-﻿################################################################################
-# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
-################################################################################
+# Ignore all bin and obj folders anywhere in the repo
+**/bin/
+**/obj/
 
 /src/b2a.db-tula/.vs/b2a.db-tula
 /src/b2a.db-tula/b2a.db-tula/bin/Debug/net8.0-windows
@@ -23,14 +23,7 @@
 /src/B2A.DbTula.Cli/Properties/launchSettings.json
 /src/b2a.db-tula/b2a.db-tula.zip
 
-# Add common .NET build artifacts
-bin/
-obj/
 *.log
-# Ignore all bin and obj folders anywhere in the repo
-**/bin/
-**/obj/
-
 # Visual Studio cache
 .vs/
 *.suo
