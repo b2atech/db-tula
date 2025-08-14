@@ -27,3 +27,28 @@
 bin/
 obj/
 *.log
+# Ignore all bin and obj folders anywhere in the repo
+**/bin/
+**/obj/
+
+# Visual Studio cache
+.vs/
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider/JetBrains
+.idea/
+*.sln.iml
+
+# NuGet packages
+*.nupkg
+
+# Misc
+*.dll
+*.exe
+*.pdb
+*.cache
+*.config
+*.log
+TestResult*/
