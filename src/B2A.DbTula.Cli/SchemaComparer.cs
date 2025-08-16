@@ -2,6 +2,7 @@
 using B2A.DbTula.Core.Abstractions;
 using B2A.DbTula.Core.Enums;
 using B2A.DbTula.Core.Models;
+using B2A.DbTula.Core.Utilities;
 using System.Text;
 
 namespace B2A.DbTula.Cli;
@@ -29,8 +30,10 @@ public class SchemaComparer : ISchemaComparer
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         Action<int, int, string, bool>? progressLogger = null,
-        bool runForTest = false, int testObjectLimit = 10)
+        bool runForTest = false, int testObjectLimit = 10,
+        ComparisonOptions? options = null)
     {
+        options ??= new ComparisonOptions();
         var results = new List<ComparisonResult>();
 
         progressLogger?.Invoke(0, 0, "🔍 Fetching schema objects...", false);
@@ -52,7 +55,8 @@ public class SchemaComparer : ISchemaComparer
             limitedSourceTables,
             limitedTargetTables,
             results,
-            progressLogger);
+            progressLogger,
+            options);
 
         // --- FUNCTIONS ---
         string GetSignatureKey(DbFunctionDefinition def) =>
@@ -79,7 +83,8 @@ public class SchemaComparer : ISchemaComparer
            limitedSourceFunctions,
            limitedTargetFunctionMap,
            results,
-           progressLogger);
+           progressLogger,
+           options);
 
         // --- PROCEDURES ---
         var sourceProcedures = await sourceProvider.GetProceduresAsync();
@@ -104,7 +109,8 @@ public class SchemaComparer : ISchemaComparer
             limitedSourceProcedureMap,
             limitedTargetProcedureMap,
             results,
-            progressLogger);
+            progressLogger,
+            options);
 
         // --- VIEWS ---
         var sourceViews = await sourceProvider.GetViewsAsync();
@@ -128,7 +134,8 @@ public class SchemaComparer : ISchemaComparer
             limitedSourceViewMap,
             limitedTargetViewMap,
             results,
-            progressLogger);
+            progressLogger,
+            options);
 
         // --- TRIGGERS ---
         var sourceTriggers = await sourceProvider.GetTriggersAsync();
@@ -153,7 +160,8 @@ public class SchemaComparer : ISchemaComparer
             limitedSourceTriggerMap,
             limitedTargetTriggerMap,
             results,
-            progressLogger);
+            progressLogger,
+            options);
 
         progressLogger?.Invoke(0, 0, "✅ Schema comparison completed.", false);
         return results;
@@ -167,8 +175,12 @@ public class SchemaComparer : ISchemaComparer
         IList<string> sourceTables,
         IList<string> targetTables,
         List<ComparisonResult> results,
-        Action<int, int, string, bool>? progressLogger)
+        Action<int, int, string, bool>? progressLogger,
+        ComparisonOptions options)
     {
+        var sourceDbKind = GetDbKind(sourceProvider);
+        var targetDbKind = GetDbKind(targetProvider);
+        
         int total = sourceTables.Count;
         var targetTableSet = new HashSet<string>(targetTables, StringComparer.OrdinalIgnoreCase);
 
@@ -197,7 +209,7 @@ public class SchemaComparer : ISchemaComparer
                 overallStatus = ComparisonStatus.Mismatch;
                 
                 // Only add script comparison as supplementary info if structural differs
-                if (!AreScriptsEqual(source.CreateScript, target.CreateScript))
+                if (!AreScriptsEqual(source.CreateScript, target.CreateScript, sourceDbKind, targetDbKind, options))
                 {
                     subResults.Add(new ComparisonSubResult(
                         "StructuralDiff",
@@ -560,8 +572,12 @@ public class SchemaComparer : ISchemaComparer
         Dictionary<string, DbFunctionDefinition> sourceFunctions,
         Dictionary<string, DbFunctionDefinition> targetFunctionMap,
         List<ComparisonResult> results,
-        Action<int, int, string, bool>? progressLogger)
+        Action<int, int, string, bool>? progressLogger,
+        ComparisonOptions options)
     {
+        var sourceDbKind = GetDbKind(sourceProvider);
+        var targetDbKind = GetDbKind(targetProvider);
+        
         int total = sourceFunctions.Count;
         int index = 0;
 
@@ -582,7 +598,7 @@ public class SchemaComparer : ISchemaComparer
             var sourceDef = await sourceProvider.GetFunctionDefinitionAsync(source.Name);
             var targetDef = await targetProvider.GetFunctionDefinitionAsync(target.Name);
 
-            if (!AreScriptsEqual(sourceDef, targetDef))
+            if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
                 results.Add(new ComparisonResult
                 {
@@ -616,8 +632,12 @@ public class SchemaComparer : ISchemaComparer
         Dictionary<string, DbFunctionDefinition> sourceProcedureMap,
         Dictionary<string, DbFunctionDefinition> targetProcedureMap,
         List<ComparisonResult> results,
-        Action<int, int, string, bool>? progressLogger)
+        Action<int, int, string, bool>? progressLogger,
+        ComparisonOptions options)
     {
+        var sourceDbKind = GetDbKind(sourceProvider);
+        var targetDbKind = GetDbKind(targetProvider);
+        
         int total = sourceProcedureMap.Count;
         int index = 0;
 
@@ -636,7 +656,7 @@ public class SchemaComparer : ISchemaComparer
             var sourceDef = await sourceProvider.GetProcedureDefinitionAsync(source.Name);
             var targetDef = await targetProvider.GetProcedureDefinitionAsync(target.Name);
 
-            if (!AreScriptsEqual(sourceDef, targetDef))
+            if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
                 results.Add(new ComparisonResult
                 {
@@ -670,8 +690,12 @@ public class SchemaComparer : ISchemaComparer
         Dictionary<string, DbViewDefinition> sourceViewMap,
         Dictionary<string, DbViewDefinition> targetViewMap,
         List<ComparisonResult> results,
-        Action<int, int, string, bool>? progressLogger)
+        Action<int, int, string, bool>? progressLogger,
+        ComparisonOptions options)
     {
+        var sourceDbKind = GetDbKind(sourceProvider);
+        var targetDbKind = GetDbKind(targetProvider);
+        
         int total = sourceViewMap.Count;
         int index = 0;
 
@@ -690,7 +714,7 @@ public class SchemaComparer : ISchemaComparer
             var sourceDef = await sourceProvider.GetViewDefinitionAsync(source.Name);
             var targetDef = await targetProvider.GetViewDefinitionAsync(target.Name);
 
-            if (!AreScriptsEqual(sourceDef, targetDef))
+            if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
                 results.Add(new ComparisonResult
                 {
@@ -724,8 +748,12 @@ public class SchemaComparer : ISchemaComparer
         Dictionary<string, DbTriggerDefinition> sourceTriggerMap,
         Dictionary<string, DbTriggerDefinition> targetTriggerMap,
         List<ComparisonResult> results,
-        Action<int, int, string, bool>? progressLogger)
+        Action<int, int, string, bool>? progressLogger,
+        ComparisonOptions options)
     {
+        var sourceDbKind = GetDbKind(sourceProvider);
+        var targetDbKind = GetDbKind(targetProvider);
+        
         int total = sourceTriggerMap.Count;
         int index = 0;
         foreach (var kvp in sourceTriggerMap)
@@ -743,7 +771,7 @@ public class SchemaComparer : ISchemaComparer
             var sourceDef = await sourceProvider.GetTriggerDefinitionAsync(source.Name);
             var targetDef = await targetProvider.GetTriggerDefinitionAsync(target.Name);
 
-            if (!AreScriptsEqual(sourceDef, targetDef))
+            if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
                 results.Add(new ComparisonResult
                 {
@@ -782,8 +810,15 @@ public class SchemaComparer : ISchemaComparer
         };
     }
 
-    private static bool AreScriptsEqual(string? sourceScript, string? targetScript)
+    private static bool AreScriptsEqual(string? sourceScript, string? targetScript, string sourceDbKind, string targetDbKind, ComparisonOptions options)
     {
+        if (options.IgnoreOwnership)
+        {
+            var canonicalizedSource = DefinitionCanonicalizer.CanonicalizeDefinition(sourceScript, sourceDbKind, options);
+            var canonicalizedTarget = DefinitionCanonicalizer.CanonicalizeDefinition(targetScript, targetDbKind, options);
+            return string.Equals(canonicalizedSource, canonicalizedTarget, StringComparison.OrdinalIgnoreCase);
+        }
+        
         return string.Equals(sourceScript?.Trim(), targetScript?.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
@@ -804,6 +839,18 @@ public class SchemaComparer : ISchemaComparer
     {
         return provider.GetType().Name.Contains("MySql", StringComparison.OrdinalIgnoreCase) ||
                provider.GetType().Name.Contains("MySQL", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Gets the database kind identifier for canonicalization
+    /// </summary>
+    private static string GetDbKind(IDatabaseSchemaProvider provider)
+    {
+        if (IsPostgresProvider(provider))
+            return "postgres";
+        if (IsMySqlProvider(provider))
+            return "mysql";
+        return "unknown";
     }
 
     /// <summary>
