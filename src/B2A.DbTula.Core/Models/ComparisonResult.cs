@@ -41,6 +41,8 @@ public class ComparisonResult
                             _mismatchStatuses.Contains(s.Status));
 
     public bool HasCreateScriptMismatch =>
-        SubResults.Any(s => s.Component.Equals("CreateScript", StringComparison.OrdinalIgnoreCase) &&
-                            _mismatchStatuses.Contains(s.Status));
+     (ObjectType == SchemaObjectType.Function || ObjectType == SchemaObjectType.Procedure)
+         ? _mismatchStatuses.Contains(Status)
+         : SubResults.Any(s => s.Component.Equals("CreateScript", StringComparison.OrdinalIgnoreCase) &&
+                               _mismatchStatuses.Contains(s.Status));
 }
