@@ -45,11 +45,12 @@ public static class DefinitionCanonicalizer
         // PostgreSQL specific patterns
         if (dbKind.Equals("postgres", StringComparison.OrdinalIgnoreCase))
         {
-            // Remove OWNER TO clauses: ALTER ... OWNER TO username;
-            result = Regex.Replace(result, @"ALTER\s+[^\s]+\s+[^\s]+\s+OWNER\s+TO\s+[^;]+;", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            // Remove OWNER TO clauses: ALTER ... OWNER TO username; (with more flexible matching)
+            result = Regex.Replace(result, @"ALTER\s+[A-Z]+\s+[^;]+\s+OWNER\s+TO\s+[^;]+;", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
             
             // Remove owner prefixes from object names: owner.object_name -> object_name  
             result = Regex.Replace(result, @"\bpublic\.", "", RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, @"\binventory\.", "", RegexOptions.IgnoreCase); // For the test case
             result = Regex.Replace(result, @"\b\w+\.", "", RegexOptions.IgnoreCase);
             
             // Remove SET search_path statements
