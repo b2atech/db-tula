@@ -11,6 +11,7 @@ public class CliOptions
     public bool TestMode { get; set; } = false;
     public int TestObjectLimit { get; set; }
     public string Title { get; set; } = "Schema Comparison Report";
+    public bool IgnoreOwnership { get; set; } = true;
 
     // Extraction options
     public bool ExtractMode { get; set; } = false;
@@ -71,6 +72,12 @@ public class CliOptions
                 case "--title":
                     if (i + 1 < args.Length) options.Title = args[++i];
                     break;
+                case "--ignore-ownership":
+                    options.IgnoreOwnership = true;
+                    break;
+                case "--no-ignore-ownership":
+                    options.IgnoreOwnership = false;
+                    break;
 
                 // --- Extraction options ---
                 case "extract": // verb style
@@ -116,6 +123,8 @@ Options:
   --test               Enable test mode (only compare limited number of objects)
   --limit <number>     Number of objects to compare when in test mode (default: 10)
   --title <text>       Custom title to be shown in the HTML report header
+  --ignore-ownership   Ignore owner/definer differences in schema objects (default: true)
+  --no-ignore-ownership  Do not ignore owner/definer differences
 
   --extract            Extraction mode (can also use verb 'extract')
   --extract-conn       Connection string for extraction

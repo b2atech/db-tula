@@ -1,0 +1,159 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Schema Comparison Report</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.0/styles/default.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+
+    <style>
+        .mismatch {
+            background-color: #fff3cd;
+        }
+
+        .missing {
+            background-color: #f8d7da;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            z-index: 2;
+        }
+
+        .code-block {
+            position: relative;
+        }
+
+            .code-block pre {
+                max-width: 100%;
+                overflow-x: auto;
+                background-color: #f8f9fa;
+                padding: 0.75rem;
+                border-radius: 0.25rem;
+            }
+
+       
+
+        .status-icon {
+            font-size: 1.2em;
+        }
+
+        .icon-match {
+            color: #52c41a; /* Green */
+        }
+
+        .icon-mismatch {
+            color: #ff4d4f; /* Red */
+        }
+
+        .icon-unknown {
+            color: #8c8c8c; /* Gray */
+        }
+    </style>
+</head>
+<body class="container my-4">
+    <h3>Schema Comparison Report : 08/16/2025 04:48:39</h3>
+
+    <div class="mb-3">
+        <span><i class="bi bi-check-circle-fill icon-match"></i> Match</span>&nbsp;&nbsp;
+        <span><i class="bi bi-x-circle-fill icon-mismatch"></i> Mismatch</span>&nbsp;&nbsp;
+        <span><i class="bi bi-dash-circle-fill icon-unknown"></i> Unknown</span>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="mismatchOnly" onchange="applyFilters()">
+                <label class="form-check-label" for="mismatchOnly">Show only mismatches</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="missingSourceOnly" onchange="applyFilters()">
+                <label class="form-check-label" for="missingSourceOnly">Missing in source</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="missingTargetOnly" onchange="applyFilters()">
+                <label class="form-check-label" for="missingTargetOnly">Missing in target</label>
+            </div>
+        </div>
+        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#syncScriptModal">
+            Show All Sync Scripts
+        </button>
+    </div>
+
+    <table class="table table-bordered table-striped align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>Type</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>PK</th>
+                <th>FK</th>
+                <th>Columns</th>
+                <th>Index</th>
+                <th>Script</th>
+                <th>Diff Script</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.0/highlight.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            hljs.highlightAll();
+        });
+
+        function applyFilters() {
+            const mismatch = document.getElementById('mismatchOnly').checked;
+            const missingSource = document.getElementById('missingSourceOnly').checked;
+            const missingTarget = document.getElementById('missingTargetOnly').checked;
+
+            const rows = document.querySelectorAll('table tbody tr[data-comparison]');
+
+            rows.forEach(row => {
+                const comparison = row.dataset.comparison;
+
+                const isMismatch = comparison === 'Mismatch';
+                const isMissingSource = comparison === 'MissingInSource';
+                const isMissingTarget = comparison === 'MissingInTarget';
+
+                if (!mismatch && !missingSource && !missingTarget) {
+                    row.style.display = '';
+                    return;
+                }
+
+                const shouldShow =
+                    (mismatch && isMismatch) ||
+                    (missingSource && isMissingSource) ||
+                    (missingTarget && isMissingTarget);
+
+                row.style.display = shouldShow ? '' : 'none';
+            });
+        }
+
+        function copyToClipboard(id) {
+            const el = document.getElementById(id);
+            navigator.clipboard.writeText(el.innerText).then(() => alert('Copied to clipboard'));
+        }
+            function toggleScript(scriptId, buttonId) {
+            const scriptEl = document.getElementById(scriptId);
+            const buttonEl = document.getElementById(buttonId);
+
+            if (scriptEl.style.display === 'none') {
+                scriptEl.style.display = 'block';
+                buttonEl.textContent = 'Hide Details';
+            } else {
+                scriptEl.style.display = 'none';
+                buttonEl.textContent = 'Show Details';
+            }
+        }
+    </script>
+</body>
+</html>

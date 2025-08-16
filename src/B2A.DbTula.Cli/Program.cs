@@ -3,6 +3,7 @@ using B2A.DbTula.Cli.Factories;
 using B2A.DbTula.Cli.Helpers;
 using B2A.DbTula.Cli.Reports;
 using B2A.DbTula.Core.Enums;
+using B2A.DbTula.Core.Models;
 using Serilog;
 using System;
 using System.IO;
@@ -79,12 +80,18 @@ internal class Program
                     verbose: true,
                     logLevel: LogLevel.Basic);
 
+                var comparisonOptions = new ComparisonOptions
+                {
+                    IgnoreOwnership = argsParsed.IgnoreOwnership
+                };
+
                 var comparisonResults = await comparer.CompareAsync(
                     sourceProvider,
                     targetProvider,
                     unifiedLogger,
                     argsParsed.TestMode,
-                    argsParsed.TestObjectLimit);
+                    argsParsed.TestObjectLimit,
+                    comparisonOptions);
 
                 var report = new SchemaComparisonReport
                 {

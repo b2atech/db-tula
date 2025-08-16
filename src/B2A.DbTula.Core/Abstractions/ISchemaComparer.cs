@@ -10,6 +10,7 @@ public interface ISchemaComparer
         IDatabaseSchemaProvider targetProvider,
          Action<int, int, string,bool>? progressLogger = null,
         bool runForTest = false,
-        int testObjectLimit = 10
+        int testObjectLimit = 10,
+        ComparisonOptions? options = null
     );
 }
