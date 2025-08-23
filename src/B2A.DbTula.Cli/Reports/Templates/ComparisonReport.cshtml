@@ -39,8 +39,6 @@
                 border-radius: 0.25rem;
             }
 
-       
-
         .status-icon {
             font-size: 1.2em;
         }
@@ -55,6 +53,196 @@
 
         .icon-unknown {
             color: #8c8c8c; /* Gray */
+        }
+
+        /* Side-by-side diff styles */
+        .sql-diff-container {
+            border: 1px solid #e0e0e0;
+            border-radius: 0.25rem;
+            overflow: hidden;
+            background-color: #ffffff;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        }
+
+        .sql-diff-header {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .sql-diff-pane-header {
+            padding: 0.5rem 1rem;
+            font-weight: 600;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .source-header {
+            border-right: 1px solid #e0e0e0;
+            background-color: #fff5f5;
+            color: #c53030;
+        }
+
+        .target-header {
+            background-color: #f0fff4;
+            color: #38a169;
+        }
+
+        .sql-diff-content {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .sql-diff-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .sql-diff-pane {
+            padding: 0;
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .sql-diff-left {
+            border-right: 1px solid #e0e0e0;
+        }
+
+        .line-number {
+            display: inline-block;
+            width: 3rem;
+            padding: 0.25rem 0.5rem;
+            background-color: #f8f9fa;
+            color: #6c757d;
+            font-size: 0.75rem;
+            text-align: right;
+            user-select: none;
+            border-right: 1px solid #e0e0e0;
+            flex-shrink: 0;
+        }
+
+        .line-content {
+            flex: 1;
+            padding: 0.25rem 0.5rem;
+            overflow-x: auto;
+            white-space: pre;
+            font-size: 0.875rem;
+            line-height: 1.4;
+        }
+
+        .line-content code {
+            background: none !important;
+            padding: 0 !important;
+            font-size: inherit;
+        }
+
+        /* Diff highlighting */
+        .diff-unchanged {
+            background-color: #ffffff;
+        }
+
+        .diff-deleted {
+            background-color: #ffeef0;
+        }
+
+        .diff-deleted .line-number {
+            background-color: #fdb8c0;
+            color: #721c24;
+        }
+
+        .diff-inserted {
+            background-color: #f0fff4;
+        }
+
+        .diff-inserted .line-number {
+            background-color: #a7f3d0;
+            color: #14532d;
+        }
+
+        .diff-modified {
+            background-color: #fffbeb;
+        }
+
+        .diff-modified .line-number {
+            background-color: #fed7aa;
+            color: #9a3412;
+        }
+
+        .diff-mixed {
+            background-color: #f8f9fa;
+        }
+
+        /* No differences state */
+        .no-differences {
+            text-align: center;
+            padding: 2rem;
+            color: #6c757d;
+        }
+
+        .no-diff-message {
+            font-style: italic;
+            margin-bottom: 1rem;
+        }
+
+        /* Diff toggle controls */
+        .diff-controls {
+            margin-bottom: 0.5rem;
+        }
+
+        .diff-toggle-btn {
+            font-size: 0.875rem;
+            padding: 0.25rem 0.5rem;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .sql-diff-header {
+                grid-template-columns: 1fr;
+            }
+            
+            .sql-diff-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .sql-diff-left {
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+            
+            .source-header:before {
+                content: "📄 ";
+            }
+            
+            .target-header:before {
+                content: "📄 ";
+            }
+        }
+
+        /* Code highlighting enhancements */
+        .hljs {
+            background: transparent !important;
+        }
+
+        /* Accessibility improvements */
+        .sql-diff-container:focus-within {
+            box-shadow: 0 0 0 2px #007bff25;
+        }
+
+        /* Print styles */
+        @media print {
+            .sql-diff-container {
+                break-inside: avoid;
+                font-size: 0.75rem;
+            }
+            
+            .diff-controls {
+                display: none;
+            }
         }
     </style>
 </head>
@@ -82,9 +270,46 @@
                 <label class="form-check-label" for="missingTargetOnly">Missing in target</label>
             </div>
         </div>
-        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#syncScriptModal">
-            Show All Sync Scripts
-        </button>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#helpSection" aria-expanded="false">
+                <i class="bi bi-question-circle"></i> Help
+            </button>
+            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#syncScriptModal">
+                Show All Sync Scripts
+            </button>
+        </div>
+    </div>
+
+    <!-- Help Section -->
+    <div class="collapse mb-3" id="helpSection">
+        <div class="card card-body">
+            <h6><i class="bi bi-info-circle"></i> Features & Navigation</h6>
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>Diff Views:</strong>
+                    <ul class="small">
+                        <li><strong>Simple View:</strong> Traditional combined diff with SOURCE/TARGET sections</li>
+                        <li><strong>Side-by-Side View:</strong> Modern split-pane diff with line-by-line highlighting</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <strong>Keyboard Shortcuts:</strong>
+                    <ul class="small">
+                        <li><kbd>Ctrl/Cmd + J</kbd> - Next difference</li>
+                        <li><kbd>Ctrl/Cmd + K</kbd> - Previous difference</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-12">
+                    <strong>Diff Highlighting:</strong>
+                    <span class="badge bg-light text-dark border">Unchanged</span>
+                    <span class="badge" style="background-color: #ffeef0; color: #721c24;">Deleted</span>
+                    <span class="badge" style="background-color: #f0fff4; color: #14532d;">Inserted</span>
+                    <span class="badge" style="background-color: #fffbeb; color: #9a3412;">Modified</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <table class="table table-bordered table-striped align-middle">
@@ -164,16 +389,28 @@
                         {
                             var scriptId = $"script-{diffId}";
                             var buttonId = $"btn-toggle-{diffId}";
+                            var sideBySideId = $"sidebyside-{diffId}";
+                            var viewToggleId = $"toggle-view-{diffId}";
                             allSyncScripts.AppendLine($"-- {item.ObjectType}: {item.Name}\n{combinedScript}\n");
 
                             <div class="code-block">
-                                <div class="d-flex justify-content-start gap-2 mb-2">
+                                <div class="d-flex justify-content-start gap-2 mb-2 diff-controls">
                                     <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('@diffId')">Copy</button>
                                     <button class="btn btn-sm btn-outline-primary" id="@buttonId" onclick="toggleScript('@scriptId', '@buttonId')">Show Details</button>
+                                    @if (item.HasSideBySideDiff)
+                                    {
+                                        <button class="btn btn-sm btn-outline-info diff-toggle-btn" id="@viewToggleId" onclick="toggleDiffView('@scriptId', '@sideBySideId', '@viewToggleId')">Side-by-Side View</button>
+                                    }
                                 </div>
                                 <div id="@scriptId" style="display: none;">
                                     <pre><code class="language-sql hljs" id="@diffId">@combinedScript</code></pre>
                                 </div>
+                                @if (item.HasSideBySideDiff)
+                                {
+                                    <div id="@sideBySideId" style="display: none;">
+                                        @Raw(item.SideBySideDiffHtml)
+                                    </div>
+                                }
                             </div>
                         }
                     </td>
@@ -247,7 +484,8 @@
             const el = document.getElementById(id);
             navigator.clipboard.writeText(el.innerText).then(() => alert('Copied to clipboard'));
         }
-            function toggleScript(scriptId, buttonId) {
+
+        function toggleScript(scriptId, buttonId) {
             const scriptEl = document.getElementById(scriptId);
             const buttonEl = document.getElementById(buttonId);
 
@@ -258,6 +496,77 @@
                 scriptEl.style.display = 'none';
                 buttonEl.textContent = 'Show Details';
             }
+        }
+
+        function toggleDiffView(simpleId, sideBySideId, toggleButtonId) {
+            const simpleEl = document.getElementById(simpleId);
+            const sideBySideEl = document.getElementById(sideBySideId);
+            const toggleBtn = document.getElementById(toggleButtonId);
+
+            if (sideBySideEl.style.display === 'none') {
+                // Switch to side-by-side view
+                simpleEl.style.display = 'none';
+                sideBySideEl.style.display = 'block';
+                toggleBtn.textContent = 'Simple View';
+                toggleBtn.className = 'btn btn-sm btn-outline-secondary diff-toggle-btn';
+                
+                // Re-apply syntax highlighting to the side-by-side view
+                requestAnimationFrame(() => {
+                    const codeElements = sideBySideEl.querySelectorAll('code.language-sql');
+                    codeElements.forEach(el => hljs.highlightElement(el));
+                });
+            } else {
+                // Switch to simple view
+                sideBySideEl.style.display = 'none';
+                simpleEl.style.display = 'block';
+                toggleBtn.textContent = 'Side-by-Side View';
+                toggleBtn.className = 'btn btn-sm btn-outline-info diff-toggle-btn';
+            }
+        }
+
+        // Keyboard navigation for diff views
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case 'k':
+                        e.preventDefault();
+                        // Navigate to previous diff
+                        navigateToDiff(-1);
+                        break;
+                    case 'j':
+                        e.preventDefault();
+                        // Navigate to next diff
+                        navigateToDiff(1);
+                        break;
+                }
+            }
+        });
+
+        function navigateToDiff(direction) {
+            const diffElements = document.querySelectorAll('.code-block');
+            const currentActive = document.querySelector('.code-block.active') || diffElements[0];
+            
+            if (!currentActive) return;
+
+            const currentIndex = Array.from(diffElements).indexOf(currentActive);
+            let nextIndex = currentIndex + direction;
+            
+            if (nextIndex < 0) nextIndex = diffElements.length - 1;
+            if (nextIndex >= diffElements.length) nextIndex = 0;
+            
+            // Remove active class from current
+            diffElements.forEach(el => el.classList.remove('active'));
+            
+            // Add active class to next and scroll into view
+            const nextElement = diffElements[nextIndex];
+            nextElement.classList.add('active');
+            nextElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Add visual indicator
+            nextElement.style.boxShadow = '0 0 10px rgba(0, 123, 255, 0.5)';
+            setTimeout(() => {
+                nextElement.style.boxShadow = '';
+            }, 2000);
         }
     </script>
 </body>

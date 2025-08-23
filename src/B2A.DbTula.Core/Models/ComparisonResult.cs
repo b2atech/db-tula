@@ -11,6 +11,12 @@ public class ComparisonResult
     public string Details { get; set; } = string.Empty;
     public string? DiffScript { get; set; }
 
+    // New properties for side-by-side diff visualization
+    public string? SourceScript { get; set; }
+    public string? TargetScript { get; set; }
+    public string? SideBySideDiffHtml { get; set; }
+    public bool HasSideBySideDiff => !string.IsNullOrWhiteSpace(SideBySideDiffHtml);
+
     public List<ComparisonSubResult> SubResults { get; set; } = new();
 
     public string DisplayType => ObjectType.ToDisplayString();

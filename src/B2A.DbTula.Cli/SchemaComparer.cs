@@ -3,6 +3,7 @@ using B2A.DbTula.Core.Abstractions;
 using B2A.DbTula.Core.Enums;
 using B2A.DbTula.Core.Models;
 using B2A.DbTula.Core.Utilities;
+using B2A.DbTula.Cli.Services;
 using System.Text;
 
 namespace B2A.DbTula.Cli;
@@ -26,6 +27,12 @@ namespace B2A.DbTula.Cli;
 /// </summary>
 public class SchemaComparer : ISchemaComparer
 {
+    private readonly SqlDiffService _sqlDiffService;
+
+    public SchemaComparer()
+    {
+        _sqlDiffService = new SqlDiffService();
+    }
     public async Task<IList<ComparisonResult>> CompareAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
@@ -169,7 +176,7 @@ public class SchemaComparer : ISchemaComparer
 
     // ---------- COMPARE METHODS -----------
 
-    private static async Task CompareTablesAsync(
+    private async Task CompareTablesAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         IList<string> sourceTables,
@@ -236,6 +243,10 @@ public class SchemaComparer : ISchemaComparer
                 DiffScript = diffScript,
                 SubResults = subResults
             };
+
+            // Enhance with side-by-side diff information
+            EnhanceComparisonResultWithDiff(res, source.CreateScript, target.CreateScript);
+            
             results.Add(res);
         }
 
@@ -247,7 +258,7 @@ public class SchemaComparer : ISchemaComparer
         }
     }
 
-    private static async Task<ComparisonStatus> ComparePrimaryKeysAsync(
+    private async Task<ComparisonStatus> ComparePrimaryKeysAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         TableDefinition source,
@@ -302,7 +313,7 @@ public class SchemaComparer : ISchemaComparer
         return ComparisonStatus.Match;
     }
 
-    private static ComparisonStatus CompareColumns(TableDefinition source, TableDefinition target, List<ComparisonSubResult> subResults)
+    private ComparisonStatus CompareColumns(TableDefinition source, TableDefinition target, List<ComparisonSubResult> subResults)
     {
         var status = ComparisonStatus.Match;
         var sourceCols = source.Columns.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
@@ -337,7 +348,7 @@ public class SchemaComparer : ISchemaComparer
         return status;
     }
 
-    private static async Task<ComparisonStatus> CompareForeignKeysAsync(
+    private async Task<ComparisonStatus> CompareForeignKeysAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         TableDefinition source,
@@ -391,7 +402,7 @@ public class SchemaComparer : ISchemaComparer
         return status;
     }
 
-    private static async Task<ComparisonStatus> CompareIndexesAsync(
+    private async Task<ComparisonStatus> CompareIndexesAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         TableDefinition source,
@@ -497,7 +508,7 @@ public class SchemaComparer : ISchemaComparer
         }
     }
 
-    private static string? BuildDiffScript(TableDefinition source, TableDefinition target, List<ComparisonSubResult> subResults, ComparisonStatus status)
+    private string? BuildDiffScript(TableDefinition source, TableDefinition target, List<ComparisonSubResult> subResults, ComparisonStatus status)
     {
         if (status == ComparisonStatus.Match) return null;
 
@@ -520,7 +531,25 @@ public class SchemaComparer : ISchemaComparer
         return sb.ToString().Trim();
     }
 
-    private static async Task<ComparisonResult> HandleTableMissingInSourceAsync(IDatabaseSchemaProvider provider, string tableName)
+    private void EnhanceComparisonResultWithDiff(ComparisonResult result, string? sourceScript, string? targetScript)
+    {
+        // Set source and target scripts
+        result.SourceScript = sourceScript?.Trim();
+        result.TargetScript = targetScript?.Trim();
+
+        // Generate side-by-side diff if there are differences
+        if (result.Status != ComparisonStatus.Match && 
+            (!string.IsNullOrWhiteSpace(sourceScript) || !string.IsNullOrWhiteSpace(targetScript)))
+        {
+            var diffResult = _sqlDiffService.ComputeDiff(sourceScript, targetScript);
+            if (diffResult.HasDifferences)
+            {
+                result.SideBySideDiffHtml = _sqlDiffService.GenerateSideBySideHtml(diffResult);
+            }
+        }
+    }
+
+    private async Task<ComparisonResult> HandleTableMissingInSourceAsync(IDatabaseSchemaProvider provider, string tableName)
     {
         var table = await provider.GetTableDefinitionAsync(tableName);
         var subResults = new List<ComparisonSubResult>();
@@ -566,7 +595,7 @@ public class SchemaComparer : ISchemaComparer
     }
 
     // --- FUNCTIONS ---
-    private static async Task CompareFunctionsAsync(
+    private async Task CompareFunctionsAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         Dictionary<string, DbFunctionDefinition> sourceFunctions,
@@ -600,14 +629,16 @@ public class SchemaComparer : ISchemaComparer
 
             if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
-                results.Add(new ComparisonResult
+                var result = new ComparisonResult
                 {
                     ObjectType = SchemaObjectType.Function,
                     Name = source.Name,
                     Status = ComparisonStatus.Mismatch,
                     Details = "Function definition differs",
                     DiffScript = $"-- SOURCE\n{sourceDef}\n\n-- TARGET\n{targetDef}"
-                });
+                };
+                EnhanceComparisonResultWithDiff(result, sourceDef, targetDef);
+                results.Add(result);
             }
             else
             {
@@ -626,7 +657,7 @@ public class SchemaComparer : ISchemaComparer
     }
 
     // --- PROCEDURES ---
-    private static async Task CompareProceduresAsync(
+    private async Task CompareProceduresAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         Dictionary<string, DbFunctionDefinition> sourceProcedureMap,
@@ -658,14 +689,16 @@ public class SchemaComparer : ISchemaComparer
 
             if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
-                results.Add(new ComparisonResult
+                var result = new ComparisonResult
                 {
                     ObjectType = SchemaObjectType.Procedure,
                     Name = source.Name,
                     Status = ComparisonStatus.Mismatch,
                     Details = "Procedure definition differs",
                     DiffScript = $"-- SOURCE\n{sourceDef}\n\n-- TARGET\n{targetDef}"
-                });
+                };
+                EnhanceComparisonResultWithDiff(result, sourceDef, targetDef);
+                results.Add(result);
             }
             else
             {
@@ -684,7 +717,7 @@ public class SchemaComparer : ISchemaComparer
     }
 
     // --- VIEWS ---
-    private static async Task CompareViewsAsync(
+    private async Task CompareViewsAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         Dictionary<string, DbViewDefinition> sourceViewMap,
@@ -716,14 +749,16 @@ public class SchemaComparer : ISchemaComparer
 
             if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
-                results.Add(new ComparisonResult
+                var result = new ComparisonResult
                 {
                     ObjectType = SchemaObjectType.View,
                     Name = source.Name,
                     Status = ComparisonStatus.Mismatch,
                     Details = "View definition differs",
                     DiffScript = $"-- SOURCE\n{sourceDef}\n\n-- TARGET\n{targetDef}"
-                });
+                };
+                EnhanceComparisonResultWithDiff(result, sourceDef, targetDef);
+                results.Add(result);
             }
             else
             {
@@ -742,7 +777,7 @@ public class SchemaComparer : ISchemaComparer
     }
 
     // --- TRIGGERS ---
-    private static async Task CompareTriggersAsync(
+    private async Task CompareTriggersAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         Dictionary<string, DbTriggerDefinition> sourceTriggerMap,
@@ -773,14 +808,16 @@ public class SchemaComparer : ISchemaComparer
 
             if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
-                results.Add(new ComparisonResult
+                var result = new ComparisonResult
                 {
                     ObjectType = SchemaObjectType.Trigger,
                     Name = source.Name,
                     Status = ComparisonStatus.Mismatch,
                     Details = "Trigger definition differs",
                     DiffScript = $"-- SOURCE\n{sourceDef}\n\n-- TARGET\n{targetDef}"
-                });
+                };
+                EnhanceComparisonResultWithDiff(result, sourceDef, targetDef);
+                results.Add(result);
             }
             else
             {
@@ -798,16 +835,36 @@ public class SchemaComparer : ISchemaComparer
         }
     }
 
-    // --- HELPERS ---
-    private static ComparisonResult CreateResult(string name, SchemaObjectType type, ComparisonStatus status, string diffScript = "")
+    private ComparisonResult CreateResult(string name, SchemaObjectType type, ComparisonStatus status, string diffScript = "")
     {
-        return new ComparisonResult
+        var result = new ComparisonResult
         {
             ObjectType = type,
             Name = name,
             Status = status,
             DiffScript = diffScript
         };
+
+        // For single-script objects (Functions, Procedures, Views, Triggers), the diffScript might be the definition
+        // We need to handle side-by-side diff differently based on the status
+        if (type == SchemaObjectType.Function || type == SchemaObjectType.Procedure || 
+            type == SchemaObjectType.View || type == SchemaObjectType.Trigger)
+        {
+            if (status == ComparisonStatus.MissingInTarget)
+            {
+                // Source exists, target doesn't - show source vs empty
+                EnhanceComparisonResultWithDiff(result, diffScript, null);
+            }
+            else if (status == ComparisonStatus.MissingInSource)
+            {
+                // Target exists, source doesn't - show empty vs target
+                EnhanceComparisonResultWithDiff(result, null, diffScript);
+            }
+            // For Match status, no diff needed
+            // For Mismatch, we need to get both source and target - handled elsewhere
+        }
+
+        return result;
     }
 
     private static bool AreScriptsEqual(string? sourceScript, string? targetScript, string sourceDbKind, string targetDbKind, ComparisonOptions options)
