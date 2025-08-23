@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Side-by-Side SQL Diff Visualization Demo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.0/styles/default.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+
+    <style>
+        /* Side-by-side diff styles */
+        .sql-diff-container {
+            border: 1px solid #e0e0e0;
+            border-radius: 0.25rem;
+            overflow: hidden;
+            background-color: #ffffff;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        }
+
+        .sql-diff-header {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .sql-diff-pane-header {
+            padding: 0.5rem 1rem;
+            font-weight: 600;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .source-header {
+            border-right: 1px solid #e0e0e0;
+            background-color: #fff5f5;
+            color: #c53030;
+        }
+
+        .target-header {
+            background-color: #f0fff4;
+            color: #38a169;
+        }
+
+        .sql-diff-content {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .sql-diff-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .sql-diff-pane {
+            padding: 0;
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .sql-diff-left {
+            border-right: 1px solid #e0e0e0;
+        }
+
+        .line-number {
+            display: inline-block;
+            width: 3rem;
+            padding: 0.25rem 0.5rem;
+            background-color: #f8f9fa;
+            color: #6c757d;
+            font-size: 0.75rem;
+            text-align: right;
+            user-select: none;
+            border-right: 1px solid #e0e0e0;
+            flex-shrink: 0;
+        }
+
+        .line-content {
+            flex: 1;
+            padding: 0.25rem 0.5rem;
+            overflow-x: auto;
+            white-space: pre;
+            font-size: 0.875rem;
+            line-height: 1.4;
+        }
+
+        .line-content code {
+            background: none !important;
+            padding: 0 !important;
+            font-size: inherit;
+        }
+
+        /* Diff highlighting */
+        .diff-unchanged {
+            background-color: #ffffff;
+        }
+
+        .diff-deleted {
+            background-color: #ffeef0;
+        }
+
+        .diff-deleted .line-number {
+            background-color: #fdb8c0;
+            color: #721c24;
+        }
+
+        .diff-inserted {
+            background-color: #f0fff4;
+        }
+
+        .diff-inserted .line-number {
+            background-color: #a7f3d0;
+            color: #14532d;
+        }
+
+        .diff-modified {
+            background-color: #fffbeb;
+        }
+
+        .diff-modified .line-number {
+            background-color: #fed7aa;
+            color: #9a3412;
+        }
+
+        .diff-mixed {
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body class="container my-4">
+    <h2>🚀 Side-by-Side SQL Diff Visualization Demo</h2>
+    <p class="text-muted">This demonstrates the world-class diff visualization implemented in DBTula.</p>
+
+    <div class="row">
+        <div class="col-12">
+            <h4>Example: Table Schema Comparison</h4>
+            <div class='sql-diff-container'>
+                <div class='sql-diff-header'>
+                    <div class='sql-diff-pane-header source-header'>
+                        <i class='bi bi-file-text'></i> Source Script
+                    </div>
+                    <div class='sql-diff-pane-header target-header'>
+                        <i class='bi bi-file-text'></i> Target Script
+                    </div>
+                </div>
+                <div class='sql-diff-content'>
+                    <div class='sql-diff-row diff-unchanged'>
+                        <div class='sql-diff-pane sql-diff-left diff-unchanged'>
+                            <span class='line-number'>1</span>
+                            <span class='line-content'><code class='language-sql'>CREATE TABLE users (</code></span>
+                        </div>
+                        <div class='sql-diff-pane sql-diff-right diff-unchanged'>
+                            <span class='line-number'>1</span>
+                            <span class='line-content'><code class='language-sql'>CREATE TABLE users (</code></span>
+                        </div>
+                    </div>
+                    <div class='sql-diff-row diff-unchanged'>
+                        <div class='sql-diff-pane sql-diff-left diff-unchanged'>
+                            <span class='line-number'>2</span>
+                            <span class='line-content'><code class='language-sql'>    id SERIAL PRIMARY KEY,</code></span>
+                        </div>
+                        <div class='sql-diff-pane sql-diff-right diff-unchanged'>
+                            <span class='line-number'>2</span>
+                            <span class='line-content'><code class='language-sql'>    id SERIAL PRIMARY KEY,</code></span>
+                        </div>
+                    </div>
+                    <div class='sql-diff-row diff-modified'>
+                        <div class='sql-diff-pane sql-diff-left diff-modified'>
+                            <span class='line-number'>3</span>
+                            <span class='line-content'><code class='language-sql'>    name VARCHAR(100) NOT NULL,</code></span>
+                        </div>
+                        <div class='sql-diff-pane sql-diff-right diff-modified'>
+                            <span class='line-number'>3</span>
+                            <span class='line-content'><code class='language-sql'>    name VARCHAR(255) NOT NULL,</code></span>
+                        </div>
+                    </div>
+                    <div class='sql-diff-row diff-unchanged'>
+                        <div class='sql-diff-pane sql-diff-left diff-unchanged'>
+                            <span class='line-number'>4</span>
+                            <span class='line-content'><code class='language-sql'>    email VARCHAR(255) UNIQUE,</code></span>
+                        </div>
+                        <div class='sql-diff-pane sql-diff-right diff-unchanged'>
+                            <span class='line-number'>4</span>
+                            <span class='line-content'><code class='language-sql'>    email VARCHAR(255) UNIQUE,</code></span>
+                        </div>
+                    </div>
+                    <div class='sql-diff-row diff-mixed'>
+                        <div class='sql-diff-pane sql-diff-left diff-deleted'>
+                            <span class='line-number'>5</span>
+                            <span class='line-content'><code class='language-sql'>    status VARCHAR(20) DEFAULT 'active'</code></span>
+                        </div>
+                        <div class='sql-diff-pane sql-diff-right diff-inserted'>
+                            <span class='line-number'>5</span>
+                            <span class='line-content'><code class='language-sql'>    status VARCHAR(20) DEFAULT 'pending',</code></span>
+                        </div>
+                    </div>
+                    <div class='sql-diff-row diff-mixed'>
+                        <div class='sql-diff-pane sql-diff-left diff-unchanged'>
+                            <span class='line-number'></span>
+                            <span class='line-content'><code class='language-sql'></code></span>
+                        </div>
+                        <div class='sql-diff-pane sql-diff-right diff-inserted'>
+                            <span class='line-number'>6</span>
+                            <span class='line-content'><code class='language-sql'>    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP</code></span>
+                        </div>
+                    </div>
+                    <div class='sql-diff-row diff-unchanged'>
+                        <div class='sql-diff-pane sql-diff-left diff-unchanged'>
+                            <span class='line-number'>6</span>
+                            <span class='line-content'><code class='language-sql'>);</code></span>
+                        </div>
+                        <div class='sql-diff-pane sql-diff-right diff-unchanged'>
+                            <span class='line-number'>7</span>
+                            <span class='line-content'><code class='language-sql'>);</code></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <h4>Legend</h4>
+            <div class="d-flex gap-3 flex-wrap">
+                <span class="badge" style="background-color: #ffffff; color: #000; border: 1px solid #ccc;">Unchanged</span>
+                <span class="badge" style="background-color: #ffeef0; color: #721c24;">Deleted</span>
+                <span class="badge" style="background-color: #f0fff4; color: #14532d;">Added</span>
+                <span class="badge" style="background-color: #fffbeb; color: #9a3412;">Modified</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <h4>Key Features</h4>
+            <ul>
+                <li><strong>Line-by-Line Comparison:</strong> Each line is compared independently with clear visual indicators</li>
+                <li><strong>Character-Level Highlighting:</strong> Subtle differences within lines are highlighted</li>
+                <li><strong>SQL Syntax Highlighting:</strong> Full syntax highlighting maintains readability</li>
+                <li><strong>Responsive Design:</strong> Adapts to different screen sizes</li>
+                <li><strong>Keyboard Navigation:</strong> Ctrl+J/K to navigate between diffs</li>
+                <li><strong>Extensible:</strong> Supports any script type (SQL, Python, JavaScript, etc.)</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.0/highlight.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            hljs.highlightAll();
+        });
+    </script>
+</body>
+</html>
