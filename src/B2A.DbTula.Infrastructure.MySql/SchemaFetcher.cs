@@ -92,7 +92,7 @@ public class SchemaFetcher
             PrimaryKeys = pkTask.Result,
             ForeignKeys = fkTask.Result,
             Indexes = indexTask.Result,
-            CreateScript = scriptTask.Result
+            CreateScript = scriptTask.Result ?? string.Empty
         };
     }
 
@@ -104,9 +104,9 @@ public class SchemaFetcher
         return table.AsEnumerable()
             .Select(row => new ColumnDefinition
             {
-                Name = row["Field"].ToString(),
-                DataType = row["Type"].ToString(),
-                IsNullable = row["Null"].ToString() == "YES",
+                Name = row["Field"]?.ToString() ?? string.Empty,
+                DataType = row["Type"]?.ToString() ?? string.Empty,
+                IsNullable = row["Null"]?.ToString() == "YES",
                 DefaultValue = row["Default"]?.ToString()
             })
             .ToList();
@@ -125,7 +125,7 @@ public class SchemaFetcher
             ? [new PrimaryKeyDefinition
                 {
                     Name = "PRIMARY",
-                    Columns = table.AsEnumerable().Select(r => r["COLUMN_NAME"].ToString()).ToList()
+                    Columns = table.AsEnumerable().Select(r => r["COLUMN_NAME"]?.ToString() ?? string.Empty).Where(s => !string.IsNullOrEmpty(s)).ToList()
                 }]
             : [];
     }
@@ -143,10 +143,10 @@ public class SchemaFetcher
         return table.AsEnumerable()
             .Select(row => new ForeignKeyDefinition
             {
-                Name = row["constraint_name"].ToString(),
-                ColumnName = row["column_name"].ToString(),
-                ReferencedTable = row["referenced_table_name"].ToString(),
-                ReferencedColumn = row["referenced_column_name"].ToString()
+                Name = row["constraint_name"]?.ToString() ?? string.Empty,
+                ColumnName = row["column_name"]?.ToString() ?? string.Empty,
+                ReferencedTable = row["referenced_table_name"]?.ToString() ?? string.Empty,
+                ReferencedColumn = row["referenced_column_name"]?.ToString() ?? string.Empty
             }).ToList();
     }
 
@@ -156,12 +156,13 @@ public class SchemaFetcher
         var table = await ExecuteQueryAsync(query);
 
         return table.AsEnumerable()
-            .GroupBy(r => r["Key_name"].ToString())
+            .GroupBy(r => r["Key_name"]?.ToString() ?? string.Empty)
+            .Where(g => !string.IsNullOrEmpty(g.Key))
             .Select(g => new IndexDefinition
             {
                 Name = g.Key,
-                Columns = g.Select(r => r["Column_name"].ToString()).ToList(),
-                IsUnique = g.All(r => r["Non_unique"].ToString() == "0"),
+                Columns = g.Select(r => r["Column_name"]?.ToString() ?? string.Empty).Where(s => !string.IsNullOrEmpty(s)).ToList(),
+                IsUnique = g.All(r => r["Non_unique"]?.ToString() == "0"),
                 IndexType = g.First()["Index_type"]?.ToString()
             })
             .ToList();
@@ -171,21 +172,21 @@ public class SchemaFetcher
     {
         string query = $"SHOW CREATE TABLE `{tableName}`;";
         var result = await ExecuteQueryAsync(query);
-        return result.Rows.Count > 0 ? result.Rows[0]["Create Table"].ToString() : null;
+        return result.Rows.Count > 0 ? result.Rows[0]["Create Table"]?.ToString() : null;
     }
 
     public async Task<string?> GetFunctionDefinitionAsync(string functionName)
     {
         string query = $"SHOW CREATE FUNCTION `{functionName}`;";
         var result = await ExecuteQueryAsync(query);
-        return result.Rows.Count > 0 ? result.Rows[0]["Create Function"].ToString() : null;
+        return result.Rows.Count > 0 ? result.Rows[0]["Create Function"]?.ToString() : null;
     }
 
     public async Task<string?> GetProcedureDefinitionAsync(string procedureName)
     {
         string query = $"SHOW CREATE PROCEDURE `{procedureName}`;";
         var result = await ExecuteQueryAsync(query);
-        return result.Rows.Count > 0 ? result.Rows[0]["Create Procedure"].ToString() : null;
+        return result.Rows.Count > 0 ? result.Rows[0]["Create Procedure"]?.ToString() : null;
     }
 
     public async Task<string?> GetSequenceDefinitionAsync(string sequenceName)

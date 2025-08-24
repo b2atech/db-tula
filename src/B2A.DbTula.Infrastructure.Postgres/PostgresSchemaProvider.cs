@@ -89,17 +89,17 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
 
     public async Task<string> GetFunctionDefinitionAsync(string functionName)
     {
-        return await _fetcher.GetFunctionDefinitionAsync(functionName);
+        return await _fetcher.GetFunctionDefinitionAsync(functionName) ?? string.Empty;
     }
 
     public async Task<string> GetProcedureDefinitionAsync(string procedureName)
     {
-        return await _fetcher.GetProcedureDefinitionAsync(procedureName);
+        return await _fetcher.GetProcedureDefinitionAsync(procedureName) ?? string.Empty;
     }
 
     public async Task<string> GetCreateTableScriptAsync(string tableName)
     {
-        return await _fetcher.GetCreateTableScriptAsync(tableName);
+        return await _fetcher.GetCreateTableScriptAsync(tableName) ?? string.Empty;
     }
 
     private List<DbFunctionDefinition> ParseFunctionOrProcedureList(System.Data.DataTable table)
@@ -110,7 +110,7 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
         {
             list.Add(new DbFunctionDefinition
             {
-                Name = row["routine_name"].ToString(),
+                Name = row["routine_name"]?.ToString() ?? string.Empty,
                 Arguments = row["arguments"]?.ToString(),
                 Definition = row["definition"]?.ToString(),
             });
@@ -119,14 +119,14 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
         return list;
     }
 
-    public async Task<string?> GetViewDefinitionAsync(string viewName)
+    public async Task<string> GetViewDefinitionAsync(string viewName)
     {
-        return await _fetcher.GetViewDefinitionAsync(viewName);
+        return await _fetcher.GetViewDefinitionAsync(viewName) ?? string.Empty;
     }
 
-    public async Task<string?> GetTriggerDefinitionAsync(string viewName)
+    public async Task<string> GetTriggerDefinitionAsync(string triggerName)
     {
-        return await _fetcher.GetTriggerDefinitionAsync(viewName);
+        return await _fetcher.GetTriggerDefinitionAsync(triggerName) ?? string.Empty;
     }
 
     public async Task<IList<DbViewDefinition>> GetViewsAsync()
@@ -175,8 +175,8 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
         {
             list.Add(new DbTriggerDefinition
             {
-                Name = row["trigger_name"].ToString(),
-                Table = row["table_name"].ToString(),
+                Name = row["trigger_name"]?.ToString() ?? string.Empty,
+                Table = row["table_name"]?.ToString() ?? string.Empty,
                 Definition = row["definition"]?.ToString()
             });
         }

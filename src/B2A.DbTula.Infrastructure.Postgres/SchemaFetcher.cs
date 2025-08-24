@@ -112,7 +112,7 @@ public class SchemaFetcher
             PrimaryKeys = pkTask.Result,
             ForeignKeys = fkTask.Result,
             Indexes = indexTask.Result,
-            CreateScript = scriptTask.Result
+            CreateScript = scriptTask.Result ?? string.Empty
         };
     }
 
@@ -133,9 +133,9 @@ public class SchemaFetcher
 
         var result = await ExecuteQueryAsync(query);
 
-        if (result.Columns.Contains("column_name"))
+        if (result.Columns.Contains("column_name") && result.Columns["column_name"] != null)
         {
-            result.PrimaryKey = new DataColumn[] { result.Columns["column_name"] };
+            result.PrimaryKey = new DataColumn[] { result.Columns["column_name"]! };
         }
 
         return result;
@@ -193,10 +193,10 @@ public class SchemaFetcher
         {
             var newFk = new ForeignKeyDefinition
             {
-                Name = row["foreign_key_name"].ToString(),
-                ColumnName = row["column_name"].ToString(),
-                ReferencedTable = row["foreign_table_name"].ToString(),
-                ReferencedColumn = row["foreign_column_name"].ToString()
+                Name = row["foreign_key_name"]?.ToString() ?? string.Empty,
+                ColumnName = row["column_name"]?.ToString() ?? string.Empty,
+                ReferencedTable = row["foreign_table_name"]?.ToString() ?? string.Empty,
+                ReferencedColumn = row["foreign_column_name"]?.ToString() ?? string.Empty
             };
 
             if (!foreignKeyList.Any(fk =>
@@ -396,7 +396,7 @@ public class SchemaFetcher
                         ";
         var parameters = new Dictionary<string, object> { { "name", functionName } };
         var result = await ExecuteQueryAsync(query, parameters);
-        return result.Rows.Count > 0 ? result.Rows[0]["definition"].ToString() : null;
+        return result.Rows.Count > 0 ? result.Rows[0]["definition"]?.ToString() ?? string.Empty : string.Empty;
     }
 
     public async Task<string> GetProcedureDefinitionAsync(string procedureName)
@@ -419,7 +419,7 @@ public class SchemaFetcher
             };
 
         var result = await ExecuteQueryAsync(query, parameters);
-        return result.Rows.Count > 0 ? result.Rows[0]["indexdef"].ToString() : null;
+        return result.Rows.Count > 0 ? result.Rows[0]["indexdef"]?.ToString() ?? string.Empty : string.Empty;
     }
 
     public async Task<string> GetSequenceDefinitionAsync(string sequenceName)
@@ -442,7 +442,7 @@ public class SchemaFetcher
                 };
 
         var result = await ExecuteQueryAsync(query, parameters);
-        return result.Rows.Count > 0 ? result.Rows[0]["definition"].ToString() : null;
+        return result.Rows.Count > 0 ? result.Rows[0]["definition"]?.ToString() ?? string.Empty : string.Empty;
     }
 
     #endregion
