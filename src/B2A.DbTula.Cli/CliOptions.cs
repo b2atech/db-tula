@@ -21,13 +21,18 @@ public class CliOptions
     public string ExtractObjects { get; set; } = "all"; // e.g. views,functions,tables
     public bool OverwriteFiles { get; set; } = false;
 
+    // Batch configuration file
+    public string BatchConfigFile { get; set; }
+    public bool IsBatchMode { get; set; } = false;
+
     // Helper: Which operation?
-    public bool IsCompare => !ExtractMode;
-    public bool IsExtract => ExtractMode;
+    public bool IsCompare => !ExtractMode && !IsBatchMode;
+    public bool IsExtract => ExtractMode && !IsBatchMode;
 
     public bool IsValid =>
         (IsCompare && !string.IsNullOrWhiteSpace(SourceConnectionString) && !string.IsNullOrWhiteSpace(TargetConnectionString))
-        || (IsExtract && !string.IsNullOrWhiteSpace(ExtractConnectionString));
+        || (IsExtract && !string.IsNullOrWhiteSpace(ExtractConnectionString))
+        || (IsBatchMode && !string.IsNullOrWhiteSpace(BatchConfigFile));
 
     public IEnumerable<string> ExtractObjectTypes =>
         ExtractObjects == "all"
@@ -103,6 +108,16 @@ public class CliOptions
                 case "--overwrite":
                     options.OverwriteFiles = true;
                     break;
+
+                // --- Batch mode options ---
+                case "--batch":
+                case "--config":
+                    if (i + 1 < args.Length)
+                    {
+                        options.BatchConfigFile = args[++i];
+                        options.IsBatchMode = true;
+                    }
+                    break;
             }
         }
 
@@ -115,6 +130,7 @@ public class CliOptions
 Usage:
   dotnet db-tula.cli.dll compare --source <src-conn> --target <tgt-conn> --sourceType postgres --targetType mysql [--out schema-sync.html] [--test] [--limit 5] [--title ""My Report""]
   dotnet db-tula.cli.dll extract --extract-conn <conn> --extract-type postgres --outputDir dbobjects [--objects views,functions] [--overwrite]
+  dotnet db-tula.cli.dll --batch <config-file.json>
 
 Supported Types:
   postgres, mysql
@@ -132,6 +148,43 @@ Options:
   --outputDir          Directory to write extracted .sql files (default: dbobjects)
   --objects            Object types to extract (e.g. views,functions,tables; default: all)
   --overwrite          Overwrite existing files
+
+  --batch <file>       Run multiple extractions/comparisons from a JSON configuration file
+  --config <file>      Alias for --batch
+
+Batch Configuration File Example:
+{
+  ""extractionJobs"": [
+    {
+      ""name"": ""DB1"",
+      ""connectionString"": ""Server=...; Database=db1; ...,
+      ""dbType"": ""postgres"",
+      ""outputDir"": ""./extracted-db1"",
+      ""objects"": ""functions,procedures,views,triggers"",
+      ""overwrite"": true
+    },
+    {
+      ""name"": ""DB2"",
+      ""connectionString"": ""Server=...; Database=db2; ...,
+      ""dbType"": ""postgres"",
+      ""outputDir"": ""./extracted-db2"",
+      ""objects"": ""all"",
+      ""overwrite"": true
+    }
+  ],
+  ""comparisonJobs"": [
+    {
+      ""name"": ""Compare DB1 to DB2"",
+      ""sourceConnectionString"": ""Server=...; Database=db1; ...,
+      ""targetConnectionString"": ""Server=...; Database=db2; ...,
+      ""sourceType"": ""postgres"",
+      ""targetType"": ""postgres"",
+      ""outputFile"": ""./comparison-db1-db2.html"",
+      ""title"": ""DB1 vs DB2 Schema Comparison"",
+      ""ignoreOwnership"": true
+    }
+  ]
+}
 ";
     }
 }
