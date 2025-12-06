@@ -2,6 +2,7 @@
 using B2A.DbTula.Cli.Factories;
 using B2A.DbTula.Cli.Helpers;
 using B2A.DbTula.Cli.Reports;
+using B2A.DbTula.Cli.Services;
 using B2A.DbTula.Core.Enums;
 using B2A.DbTula.Core.Models;
 using Serilog;
@@ -31,7 +32,21 @@ internal class Program
 
             var unifiedLogger = LoggerHelpers.CreateUnifiedLogger();
 
-            if (argsParsed.IsExtract)
+            if (argsParsed.IsBatchMode)
+            {
+                // Batch mode - process multiple databases
+                Log.Logger.Information("Starting batch mode from configuration file: {ConfigFile}", argsParsed.BatchConfigFile);
+
+                var batchConfig = await BatchProcessor.LoadBatchConfigurationAsync(argsParsed.BatchConfigFile);
+                if (batchConfig == null)
+                {
+                    Log.Logger.Fatal("Failed to load batch configuration file");
+                    return;
+                }
+
+                await BatchProcessor.ProcessBatchAsync(batchConfig, argsParsed.TestMode, argsParsed.TestObjectLimit);
+            }
+            else if (argsParsed.IsExtract)
             {
                 // Extraction mode
                 var provider = SchemaProviderFactory.Create(

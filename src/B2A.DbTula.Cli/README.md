@@ -39,6 +39,70 @@ dbtula --source "<src-conn-string>" --target "<tgt-conn-string>" --sourceType po
 - `--targetType`    : Target DB type (`postgres` or `mysql`)
 - `--out`           : Output HTML report file (default: `schema-sync.html`)
 
+### Schema Extraction
+
+Extract database schema objects to separate SQL files:
+
+```sh
+dbtula --extract --extract-conn "<conn-string>" --extract-type postgres --outputDir ./extracted-schema --objects functions,procedures,views,triggers --overwrite
+```
+
+- `--extract`        : Enable extraction mode
+- `--extract-conn`   : Database connection string
+- `--extract-type`   : Database type (`postgres` or `mysql`)
+- `--outputDir`      : Output directory for SQL files (default: `dbobjects`)
+- `--objects`        : Object types to extract (comma-separated or `all`)
+- `--overwrite`      : Overwrite existing files
+
+### Batch Processing (Multiple Databases)
+
+Process multiple database extractions and comparisons in a single run using a JSON configuration file:
+
+```sh
+dbtula --batch batch-config.json
+# or
+dbtula --config batch-config.json
+```
+
+Example batch configuration file:
+
+```json
+{
+  "extractionJobs": [
+    {
+      "name": "QA Database",
+      "connectionString": "Server=...",
+      "dbType": "postgres",
+      "outputDir": "./extracted-qa",
+      "objects": "functions,procedures,views,triggers",
+      "overwrite": true
+    },
+    {
+      "name": "Production Database",
+      "connectionString": "Server=...",
+      "dbType": "postgres",
+      "outputDir": "./extracted-prod",
+      "objects": "all",
+      "overwrite": true
+    }
+  ],
+  "comparisonJobs": [
+    {
+      "name": "Compare QA to Prod",
+      "sourceConnectionString": "Server=...",
+      "targetConnectionString": "Server=...",
+      "sourceType": "postgres",
+      "targetType": "postgres",
+      "outputFile": "./comparison-qa-prod.html",
+      "title": "QA vs Production Schema Comparison",
+      "ignoreOwnership": true
+    }
+  ]
+}
+```
+
+See [BATCH_PROCESSING.md](../../BATCH_PROCESSING.md) for detailed documentation on batch processing.
+
 ### Additional Options
 
 - `--test`                  : Enable test mode (compare only limited number of objects)
@@ -72,6 +136,14 @@ dbtula \
 | `--title`          | Custom title for the report header                         |
 | `--test`           | Enable test mode (limits comparison to N objects)          |
 | `--limit <number>` | Number of objects to compare in test mode (default: 10)    |
+| `--extract`        | Enable extraction mode                                     |
+| `--extract-conn`   | Connection string for extraction                           |
+| `--extract-type`   | Database type for extraction (`postgres` or `mysql`)       |
+| `--outputDir`      | Directory for extracted SQL files (default: `dbobjects`)   |
+| `--objects`        | Object types to extract (e.g., `views,functions` or `all`) |
+| `--overwrite`      | Overwrite existing files                                   |
+| `--batch`          | Run multiple extractions/comparisons from a JSON config    |
+| `--config`         | Alias for `--batch`                                        |
 
 ---
 

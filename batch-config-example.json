@@ -1,0 +1,50 @@
+{
+  "extractionJobs": [
+    {
+      "name": "QA Database 1",
+      "connectionString": "Server=db.qa.example.com;Port=5432;Database=qa-db1;User Id=user1;Password=pass1;",
+      "dbType": "postgres",
+      "outputDir": "./extracted-qa-db1",
+      "objects": "functions,procedures,views,triggers",
+      "overwrite": true
+    },
+    {
+      "name": "QA Database 2",
+      "connectionString": "Server=db.qa.example.com;Port=5432;Database=qa-db2;User Id=user2;Password=pass2;",
+      "dbType": "postgres",
+      "outputDir": "./extracted-qa-db2",
+      "objects": "all",
+      "overwrite": true
+    },
+    {
+      "name": "Production Database",
+      "connectionString": "Server=db.prod.example.com;Port=5432;Database=prod-db;User Id=produser;Password=prodpass;",
+      "dbType": "postgres",
+      "outputDir": "./extracted-prod-db",
+      "objects": "functions,views",
+      "overwrite": true
+    }
+  ],
+  "comparisonJobs": [
+    {
+      "name": "Compare QA DB1 to Production",
+      "sourceConnectionString": "Server=db.qa.example.com;Port=5432;Database=qa-db1;User Id=user1;Password=pass1;",
+      "targetConnectionString": "Server=db.prod.example.com;Port=5432;Database=prod-db;User Id=produser;Password=prodpass;",
+      "sourceType": "postgres",
+      "targetType": "postgres",
+      "outputFile": "./comparison-qa-db1-vs-prod.html",
+      "title": "QA DB1 vs Production Schema Comparison",
+      "ignoreOwnership": true
+    },
+    {
+      "name": "Compare QA DB2 to Production",
+      "sourceConnectionString": "Server=db.qa.example.com;Port=5432;Database=qa-db2;User Id=user2;Password=pass2;",
+      "targetConnectionString": "Server=db.prod.example.com;Port=5432;Database=prod-db;User Id=produser;Password=prodpass;",
+      "sourceType": "postgres",
+      "targetType": "postgres",
+      "outputFile": "./comparison-qa-db2-vs-prod.html",
+      "title": "QA DB2 vs Production Schema Comparison",
+      "ignoreOwnership": true
+    }
+  ]
+}
