@@ -211,16 +211,18 @@ pipeline {
     }
 
     post {
-        always {
-            cleanWs()
-        }
-
-        success {
-            echo 'Schema comparison completed successfully!'
-        }
-
-        failure {
-            echo 'Schema comparison failed!'
+    always {
+        script {
+            deleteDir()
         }
     }
+
+    success {
+        echo 'Schema comparison completed successfully!'
+    }
+
+    failure {
+        echo 'Schema comparison failed!'
+    }
+}
 }
