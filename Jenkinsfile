@@ -5,80 +5,48 @@ pipeline {
         buildDiscarder(logRotator(daysToKeepStr: '3', numToKeepStr: '10'))
     }
 
-    // Runs daily at midnight IST
     triggers {
-        cron('30 18 * * *')
-    }
-
-    parameters {
-        string(name: 'BRANCH_TO_BUILD', defaultValue: '', description: 'Branch to build (leave blank for default)')
+        cron('30 18 * * *')   // midnight IST
     }
 
     environment {
 
-        // QA DB
+        // QA
         QA_DB_HOST     = credentials('QA_DB_HOST')
         QA_DB_PORT     = credentials('QA_DB_PORT')
         QA_DB_USER     = credentials('QA_DB_USER')
         QA_DB_PASSWORD = credentials('QA_DB_PASSWORD')
 
-        // PROD DB
+        // PROD
         PROD_DB_HOST     = credentials('PROD_DB_HOST')
         PROD_DB_PORT     = credentials('PROD_DB_PORT')
         PROD_DB_USER     = credentials('PROD_DB_USER')
         PROD_DB_PASSWORD = credentials('PROD_DB_PASSWORD')
 
-        // TEST DB
+        // TEST
         TEST_DB_HOST     = credentials('TEST_DB_HOST')
         TEST_DB_PORT     = credentials('TEST_DB_PORT')
         TEST_DB_USER     = credentials('TEST_DB_USER')
         TEST_DB_PASSWORD = credentials('TEST_DB_PASSWORD')
 
-        DO_HOST       = credentials('DO_HOST')
-        DO_USER       = credentials('DO_USER')
-        DO_SSH_KEY_ID = 'DO_SSH_KEY'
+        DO_HOST     = credentials('DO_HOST')
+        DO_USER     = credentials('DO_USER')
+        DO_PASSWORD = credentials('DO_PASSWORD')
 
         PATH = "$HOME/.dotnet:$PATH"
     }
 
     stages {
 
-        // ----------------------------------------------------
-        // Checkout
-        // ----------------------------------------------------
-        stage('Checkout') {
+        stage('Checkout Repo') {
             steps {
-                script {
-                    if (params.BRANCH_TO_BUILD?.trim()) {
-                        checkout([
-                            $class: 'GitSCM',
-                            branches: [[name: params.BRANCH_TO_BUILD]],
-                            userRemoteConfigs: [[
-                                url: 'https://github.com/b2atech/db-tula.git',
-                                credentialsId: 'github-b2a'
-                            ]]
-                        ])
-                    } else {
-                        checkout([
-                            $class: 'GitSCM',
-                            branches: [[name: '*/main']],
-                            userRemoteConfigs: [[
-                                url: 'https://github.com/b2atech/db-tula.git',
-                                credentialsId: 'github-b2a'
-                            ]]
-                        ])
-                    }
-                }
+                checkout scm
             }
         }
 
-        // ----------------------------------------------------
-        // Setup .NET SDK
-        // ----------------------------------------------------
-        stage('Setup .NET SDK') {
+        stage('Setup .NET') {
             steps {
                 sh '''
-                    set -e
                     wget https://dot.net/v1/dotnet-install.sh
                     chmod +x dotnet-install.sh
                     ./dotnet-install.sh --channel 9.0
@@ -86,38 +54,27 @@ pipeline {
             }
         }
 
-        // ----------------------------------------------------
-        // Restore Dependencies
-        // ----------------------------------------------------
         stage('Restore Dependencies') {
             steps {
                 sh '''
-                    set -e
                     dotnet restore src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj
                 '''
             }
         }
 
-        // ----------------------------------------------------
-        // Build CLI
-        // ----------------------------------------------------
         stage('Build CLI Tool') {
             steps {
                 sh '''
-                    set -e
-                    dotnet build src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj \
-                    --configuration Release
+                    dotnet build src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release
                 '''
             }
         }
 
-        // ----------------------------------------------------
-        // QA vs PROD Comparison
-        // ----------------------------------------------------
-        stage('QA vs PROD Schema Comparison') {
+        stage('Run Schema Comparison QA vs PROD') {
             steps {
                 sh '''
                     set -e
+                    set -x
 
                     services=("common" "community" "inventory" "payroll" "purchase" "sales")
 
@@ -144,13 +101,11 @@ pipeline {
             }
         }
 
-        // ----------------------------------------------------
-        // QA vs TEST Comparison
-        // ----------------------------------------------------
-        stage('QA vs TEST Schema Comparison') {
+        stage('Run Schema Comparison QA vs TEST') {
             steps {
                 sh '''
                     set -e
+                    set -x
 
                     services=("common" "community" "inventory" "payroll" "purchase" "sales")
 
@@ -177,13 +132,12 @@ pipeline {
             }
         }
 
-        // ----------------------------------------------------
-        // Validate Reports
-        // ----------------------------------------------------
         stage('Validate Reports') {
             steps {
                 sh '''
                     set -e
+
+                    ls -R gh-pages || true
 
                     if [ ! -d "gh-pages/qa-vs-prod" ] || [ -z "$(ls -A gh-pages/qa-vs-prod)" ]; then
                         echo "No reports generated for QA vs PROD"
@@ -198,28 +152,23 @@ pipeline {
             }
         }
 
-        // ----------------------------------------------------
-        // Deploy Reports
-        // ----------------------------------------------------
-        stage('Deploy Reports') {
+        stage('Deploy Schema Reports to OVH') {
             steps {
-                sshagent(credentials: [env.DO_SSH_KEY_ID]) {
-                    sh """
-                        scp -o StrictHostKeyChecking=no -r gh-pages/* \
-                        ${DO_USER}@${DO_HOST}:/var/www/dbtula-site
-                    """
-                }
+                sh '''
+                    sshpass -p "${DO_PASSWORD}" scp -o StrictHostKeyChecking=no -r gh-pages/* \
+                    ${DO_USER}@${DO_HOST}:/var/www/dbtula-site
+                '''
             }
         }
+
     }
 
     post {
         success {
-            echo 'Schema comparison completed successfully!'
+            echo "Schema comparison completed successfully!"
         }
-
         failure {
-            echo 'Schema comparison failed!'
+            echo "Schema comparison failed!"
         }
     }
 }
