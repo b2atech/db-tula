@@ -214,19 +214,12 @@ pipeline {
     }
 
     post {
-
         success {
             echo 'Schema comparison completed successfully!'
         }
 
         failure {
             echo 'Schema comparison failed!'
-        }
-
-        always {
-            node {
-                deleteDir()
-            }
         }
     }
 }
