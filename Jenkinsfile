@@ -47,30 +47,30 @@ pipeline {
         // Checkout
         // ----------------------------------------------------
         stage('Checkout') {
-    steps {
-        script {
-            if (params.BRANCH_TO_BUILD?.trim()) {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: params.BRANCH_TO_BUILD]],
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/b2atech/db-tula.git',
-                        credentialsId: 'github-b2a'
-                    ]]
-                ])
-            } else {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/b2atech/db-tula.git',
-                        credentialsId: 'github-b2a'
-                    ]]
-                ])
+            steps {
+                script {
+                    if (params.BRANCH_TO_BUILD?.trim()) {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: params.BRANCH_TO_BUILD]],
+                            userRemoteConfigs: [[
+                                url: 'https://github.com/b2atech/db-tula.git',
+                                credentialsId: 'github-b2a'
+                            ]]
+                        ])
+                    } else {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: '*/main']],
+                            userRemoteConfigs: [[
+                                url: 'https://github.com/b2atech/db-tula.git',
+                                credentialsId: 'github-b2a'
+                            ]]
+                        ])
+                    }
+                }
             }
         }
-    }
-}
 
         // ----------------------------------------------------
         // Setup .NET SDK
@@ -78,6 +78,7 @@ pipeline {
         stage('Setup .NET SDK') {
             steps {
                 sh '''
+                    set -e
                     wget https://dot.net/v1/dotnet-install.sh
                     chmod +x dotnet-install.sh
                     ./dotnet-install.sh --channel 9.0
@@ -91,6 +92,7 @@ pipeline {
         stage('Restore Dependencies') {
             steps {
                 sh '''
+                    set -e
                     dotnet restore src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj
                 '''
             }
@@ -102,6 +104,7 @@ pipeline {
         stage('Build CLI Tool') {
             steps {
                 sh '''
+                    set -e
                     dotnet build src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj \
                     --configuration Release
                 '''
@@ -200,7 +203,7 @@ pipeline {
         // ----------------------------------------------------
         stage('Deploy Reports') {
             steps {
-                sshagent (credentials: [env.DO_SSH_KEY_ID]) {
+                sshagent(credentials: [env.DO_SSH_KEY_ID]) {
                     sh """
                         scp -o StrictHostKeyChecking=no -r gh-pages/* \
                         ${DO_USER}@${DO_HOST}:/var/www/dbtula-site
@@ -211,18 +214,19 @@ pipeline {
     }
 
     post {
-    always {
-        script {
-            deleteDir()
+
+        success {
+            echo 'Schema comparison completed successfully!'
+        }
+
+        failure {
+            echo 'Schema comparison failed!'
+        }
+
+        always {
+            node {
+                deleteDir()
+            }
         }
     }
-
-    success {
-        echo 'Schema comparison completed successfully!'
-    }
-
-    failure {
-        echo 'Schema comparison failed!'
-    }
-}
 }
