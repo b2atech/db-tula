@@ -13,19 +13,19 @@ pipeline {
 
         // QA
         QA_DB_HOST     = credentials('QA_DB_HOST')
-        QA_DB_PORT     = credentials('QA_DB_PORT')
+        QA_DB_PORT     = '25061'
         QA_DB_USER     = credentials('QA_DB_USER')
         QA_DB_PASSWORD = credentials('QA_DB_PASSWORD')
 
         // PROD
         PROD_DB_HOST     = credentials('PROD_DB_HOST')
-        PROD_DB_PORT     = credentials('PROD_DB_PORT')
+        PROD_DB_PORT     = '25061'
         PROD_DB_USER     = credentials('PROD_DB_USER')
         PROD_DB_PASSWORD = credentials('PROD_DB_PASSWORD')
 
         // TEST
         TEST_DB_HOST     = credentials('TEST_DB_HOST')
-        TEST_DB_PORT     = credentials('TEST_DB_PORT')
+        TEST_DB_PORT     = '25061'
         TEST_DB_USER     = credentials('TEST_DB_USER')
         TEST_DB_PASSWORD = credentials('TEST_DB_PASSWORD')
 
