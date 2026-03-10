@@ -47,25 +47,30 @@ pipeline {
         // Checkout
         // ----------------------------------------------------
         stage('Checkout') {
-            steps {
-                script {
-                    if (params.BRANCH_TO_BUILD?.trim()) {
-                        checkout([
-                            $class: 'GitSCM',
-                            branches: [[name: params.BRANCH_TO_BUILD]],
-                            userRemoteConfigs: [[
-                                url: 'https://github.com/b2atech/dbtula.git',
-                                credentialsId: env.DO_USER
-                            ]]
-                        ])
-                        echo "Checked out branch: ${params.BRANCH_TO_BUILD}"
-                    } else {
-                        checkout scm
-                        echo "Checked out default branch"
-                    }
-                }
+    steps {
+        script {
+            if (params.BRANCH_TO_BUILD?.trim()) {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: params.BRANCH_TO_BUILD]],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/b2atech/db-tula.git',
+                        credentialsId: 'github-b2a'
+                    ]]
+                ])
+            } else {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/b2atech/db-tula.git',
+                        credentialsId: 'github-b2a'
+                    ]]
+                ])
             }
         }
+    }
+}
 
         // ----------------------------------------------------
         // Setup .NET SDK
