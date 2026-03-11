@@ -6,32 +6,38 @@ pipeline {
     }
 
     triggers {
-        cron('30 18 * * *')   // midnight IST
+        cron('30 18 * * *') // midnight IST
     }
 
     environment {
 
         // QA
-        QA_DB_HOST     = credentials('QA_DB_HOST')
-        QA_DB_PORT     = credentials('QA_DB_PORT')
-        QA_DB_USER     = credentials('QA_DB_USER')
-        QA_DB_PASSWORD = credentials('QA_DB_PASSWORD')
+        COMMONDB_QA     = credentials('CONNECTIONSTRINGS__COMMONDB_QA')
+        COMMUNITYDB_QA  = credentials('CONNECTIONSTRINGS__COMMUNITYDB_QA')
+        INVENTORYDB_QA  = credentials('CONNECTIONSTRINGS__INVENTORYDB_QA')
+        PAYROLLDB_QA    = credentials('CONNECTIONSTRINGS__PAYROLLDB_QA')
+        PURCHASEDB_QA   = credentials('CONNECTIONSTRINGS__PURCHASEDB_QA')
+        SALESDB_QA      = credentials('CONNECTIONSTRINGS__SALESDB_QA')
 
         // PROD
-        PROD_DB_HOST     = credentials('PROD_DB_HOST')
-        PROD_DB_PORT     = credentials('PROD_DB_PORT')
-        PROD_DB_USER     = credentials('PROD_DB_USER')
-        PROD_DB_PASSWORD = credentials('PROD_DB_PASSWORD')
+        COMMONDB_PROD     = credentials('CONNECTIONSTRINGS__COMMONDB_PROD')
+        COMMUNITYDB_PROD  = credentials('CONNECTIONSTRINGS__COMMUNITYDB_PROD')
+        INVENTORYDB_PROD  = credentials('CONNECTIONSTRINGS__INVENTORYDB_PROD')
+        PAYROLLDB_PROD    = credentials('CONNECTIONSTRINGS__PAYROLLDB_PROD')
+        PURCHASEDB_PROD   = credentials('CONNECTIONSTRINGS__PURCHASEDB_PROD')
+        SALESDB_PROD      = credentials('CONNECTIONSTRINGS__SALESDB_PROD')
 
         // TEST
-        TEST_DB_HOST     = credentials('TEST_DB_HOST')
-        TEST_DB_PORT     = credentials('TEST_DB_PORT')
-        TEST_DB_USER     = credentials('TEST_DB_USER')
-        TEST_DB_PASSWORD = credentials('TEST_DB_PASSWORD')
+        COMMONDB_TEST     = credentials('CONNECTIONSTRINGS__COMMONDB_TEST')
+        COMMUNITYDB_TEST  = credentials('CONNECTIONSTRINGS__COMMUNITYDB_TEST')
+        INVENTORYDB_TEST  = credentials('CONNECTIONSTRINGS__INVENTORYDB_TEST')
+        PAYROLLDB_TEST    = credentials('CONNECTIONSTRINGS__PAYROLLDB_TEST')
+        PURCHASEDB_TEST   = credentials('CONNECTIONSTRINGS__PURCHASEDB_TEST')
+        SALESDB_TEST      = credentials('CONNECTIONSTRINGS__SALESDB_TEST')
 
-        DO_HOST     = credentials('DO_HOST')
-        DO_USER     = credentials('DO_USER')
-        DO_PASSWORD = credentials('DO_PASSWORD')
+        DO_HOST       = credentials('DO_HOST')
+        DO_USER       = credentials('DO_USER')
+        DO_SSH_KEY_ID = 'DO_SSH_KEY'
 
         PATH = "$HOME/.dotnet:$PATH"
     }
@@ -40,7 +46,14 @@ pipeline {
 
         stage('Checkout Repo') {
             steps {
-                checkout scm
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/b2atech/db-tula.git',
+                        credentialsId: 'bharat-mane-git-personal-token'
+                    ]]
+                ])
             }
         }
 
@@ -70,103 +83,104 @@ pipeline {
             }
         }
 
-        stage('Run Schema Comparison QA vs PROD') {
+        stage('QA vs PROD Comparison') {
             steps {
                 sh '''
-                    set -e
-                    set -x
-
-                    services=("common" "community" "inventory" "payroll" "purchase" "sales")
-
                     mkdir -p gh-pages/qa-vs-prod
 
-                    for service in "${services[@]}"; do
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$COMMONDB_QA" --target "$COMMONDB_PROD" \
+                    --title "Common Schema Comparison (QA vs PROD)" \
+                    --out "gh-pages/qa-vs-prod/common.html"
 
-                        echo "Comparing QA → PROD for $service..."
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$COMMUNITYDB_QA" --target "$COMMUNITYDB_PROD" \
+                    --title "Community Schema Comparison (QA vs PROD)" \
+                    --out "gh-pages/qa-vs-prod/community.html"
 
-                        SOURCE_CONN="Server=${QA_DB_HOST};Port=${QA_DB_PORT};Database=qa-dhanman-${service};User Id=${QA_DB_USER};Password=${QA_DB_PASSWORD};"
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$INVENTORYDB_QA" --target "$INVENTORYDB_PROD" \
+                    --title "Inventory Schema Comparison (QA vs PROD)" \
+                    --out "gh-pages/qa-vs-prod/inventory.html"
 
-                        TARGET_CONN="Server=${PROD_DB_HOST};Port=${PROD_DB_PORT};Database=prod-dhanman-${service};User Id=${PROD_DB_USER};Password=${PROD_DB_PASSWORD};"
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$PAYROLLDB_QA" --target "$PAYROLLDB_PROD" \
+                    --title "Payroll Schema Comparison (QA vs PROD)" \
+                    --out "gh-pages/qa-vs-prod/payroll.html"
 
-                        dotnet run \
-                          --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj \
-                          --configuration Release -- \
-                          --source "$SOURCE_CONN" \
-                          --target "$TARGET_CONN" \
-                          --title "${service} Schema Comparison Report (QA vs PROD)" \
-                          --out "gh-pages/qa-vs-prod/${service}.html"
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$PURCHASEDB_QA" --target "$PURCHASEDB_PROD" \
+                    --title "Purchase Schema Comparison (QA vs PROD)" \
+                    --out "gh-pages/qa-vs-prod/purchase.html"
 
-                    done
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$SALESDB_QA" --target "$SALESDB_PROD" \
+                    --title "Sales Schema Comparison (QA vs PROD)" \
+                    --out "gh-pages/qa-vs-prod/sales.html"
                 '''
             }
         }
 
-        stage('Run Schema Comparison QA vs TEST') {
+        stage('QA vs TEST Comparison') {
             steps {
                 sh '''
-                    set -e
-                    set -x
-
-                    services=("common" "community" "inventory" "payroll" "purchase" "sales")
-
                     mkdir -p gh-pages/qa-vs-test
 
-                    for service in "${services[@]}"; do
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$COMMONDB_QA" --target "$COMMONDB_TEST" \
+                    --title "Common Schema Comparison (QA vs TEST)" \
+                    --out "gh-pages/qa-vs-test/common.html"
 
-                        echo "Comparing QA → TEST for $service..."
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$COMMUNITYDB_QA" --target "$COMMUNITYDB_TEST" \
+                    --title "Community Schema Comparison (QA vs TEST)" \
+                    --out "gh-pages/qa-vs-test/community.html"
 
-                        SOURCE_CONN="Server=${QA_DB_HOST};Port=${QA_DB_PORT};Database=qa-dhanman-${service};User Id=${QA_DB_USER};Password=${QA_DB_PASSWORD};"
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$INVENTORYDB_QA" --target "$INVENTORYDB_TEST" \
+                    --title "Inventory Schema Comparison (QA vs TEST)" \
+                    --out "gh-pages/qa-vs-test/inventory.html"
 
-                        TARGET_CONN="Server=${TEST_DB_HOST};Port=${TEST_DB_PORT};Database=test-dhanman-${service};User Id=${TEST_DB_USER};Password=${TEST_DB_PASSWORD};"
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$PAYROLLDB_QA" --target "$PAYROLLDB_TEST" \
+                    --title "Payroll Schema Comparison (QA vs TEST)" \
+                    --out "gh-pages/qa-vs-test/payroll.html"
 
-                        dotnet run \
-                          --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj \
-                          --configuration Release -- \
-                          --source "$SOURCE_CONN" \
-                          --target "$TARGET_CONN" \
-                          --title "${service} Schema Comparison Report (QA vs TEST)" \
-                          --out "gh-pages/qa-vs-test/${service}.html"
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$PURCHASEDB_QA" --target "$PURCHASEDB_TEST" \
+                    --title "Purchase Schema Comparison (QA vs TEST)" \
+                    --out "gh-pages/qa-vs-test/purchase.html"
 
-                    done
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$SALESDB_QA" --target "$SALESDB_TEST" \
+                    --title "Sales Schema Comparison (QA vs TEST)" \
+                    --out "gh-pages/qa-vs-test/sales.html"
                 '''
             }
         }
 
-        stage('Validate Reports') {
+        stage('Deploy Reports to OVH') {
             steps {
-                sh '''
-                    set -e
-
-                    ls -R gh-pages || true
-
-                    if [ ! -d "gh-pages/qa-vs-prod" ] || [ -z "$(ls -A gh-pages/qa-vs-prod)" ]; then
-                        echo "No reports generated for QA vs PROD"
-                        exit 1
-                    fi
-
-                    if [ ! -d "gh-pages/qa-vs-test" ] || [ -z "$(ls -A gh-pages/qa-vs-test)" ]; then
-                        echo "No reports generated for QA vs TEST"
-                        exit 1
-                    fi
-                '''
-            }
-        }
-
-        stage('Deploy Schema Reports to OVH') {
-            steps {
-                sh '''
-                    sshpass -p "${DO_PASSWORD}" scp -o StrictHostKeyChecking=no -r gh-pages/* \
-                    ${DO_USER}@${DO_HOST}:/var/www/dbtula-site
-                '''
+                sshagent (credentials: [env.DO_SSH_KEY_ID]) {
+                    sh '''
+                        scp -o StrictHostKeyChecking=no -r gh-pages/* \
+                        ${DO_USER}@${DO_HOST}:/var/www/dbtula-site
+                    '''
+                }
             }
         }
 
     }
 
     post {
+        always {
+            cleanWs()
+        }
+
         success {
             echo "Schema comparison completed successfully!"
         }
+
         failure {
             echo "Schema comparison failed!"
         }
