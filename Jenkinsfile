@@ -88,37 +88,37 @@ pipeline {
                 sh '''
                     mkdir -p gh-pages/qa-vs-prod
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
                     --source "$COMMONDB_QA" --target "$COMMONDB_PROD" \
                     --source-label "QA" --target-label "PROD" \
                     --title "Common Schema Comparison (QA vs PROD)" \
                     --out "gh-pages/qa-vs-prod/common.html"
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
                     --source "$COMMUNITYDB_QA" --target "$COMMUNITYDB_PROD" \
                     --source-label "QA" --target-label "PROD" \
                     --title "Community Schema Comparison (QA vs PROD)" \
                     --out "gh-pages/qa-vs-prod/community.html"
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
                     --source "$INVENTORYDB_QA" --target "$INVENTORYDB_PROD" \
                     --source-label "QA" --target-label "PROD" \
                     --title "Inventory Schema Comparison (QA vs PROD)" \
                     --out "gh-pages/qa-vs-prod/inventory.html"
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
                     --source "$PAYROLLDB_QA" --target "$PAYROLLDB_PROD" \
                     --source-label "QA" --target-label "PROD" \
                     --title "Payroll Schema Comparison (QA vs PROD)" \
                     --out "gh-pages/qa-vs-prod/payroll.html"
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
                     --source "$PURCHASEDB_QA" --target "$PURCHASEDB_PROD" \
                     --source-label "QA" --target-label "PROD" \
                     --title "Purchase Schema Comparison (QA vs PROD)" \
                     --out "gh-pages/qa-vs-prod/purchase.html"
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
                     --source "$SALESDB_QA" --target "$SALESDB_PROD" \
                     --source-label "QA" --target-label "PROD" \
                     --title "Sales Schema Comparison (QA vs PROD)" \
@@ -143,7 +143,7 @@ pipeline {
                                 string(credentialsId: prodCredId, variable: 'SVC_PROD')
                             ]) {
                                 sh """
-                                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \\
+                                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \\
                                     --source "\$SVC_QA" --target "\$SVC_PROD" \\
                                     --source-label "QA" --target-label "PROD" \\
                                     --title "${svc.title} Schema Comparison (QA vs PROD)" \\
@@ -163,37 +163,37 @@ pipeline {
                 sh '''
                     mkdir -p gh-pages/qa-vs-test
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
                     --source "$COMMONDB_QA" --target "$COMMONDB_TEST" \
                     --source-label "QA" --target-label "TEST" \
                     --title "Common Schema Comparison (QA vs TEST)" \
                     --out "gh-pages/qa-vs-test/common.html"
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
                     --source "$COMMUNITYDB_QA" --target "$COMMUNITYDB_TEST" \
                     --source-label "QA" --target-label "TEST" \
                     --title "Community Schema Comparison (QA vs TEST)" \
                     --out "gh-pages/qa-vs-test/community.html"
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
                     --source "$INVENTORYDB_QA" --target "$INVENTORYDB_TEST" \
                     --source-label "QA" --target-label "TEST" \
                     --title "Inventory Schema Comparison (QA vs TEST)" \
                     --out "gh-pages/qa-vs-test/inventory.html"
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
                     --source "$PAYROLLDB_QA" --target "$PAYROLLDB_TEST" \
                     --source-label "QA" --target-label "TEST" \
                     --title "Payroll Schema Comparison (QA vs TEST)" \
                     --out "gh-pages/qa-vs-test/payroll.html"
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
                     --source "$PURCHASEDB_QA" --target "$PURCHASEDB_TEST" \
                     --source-label "QA" --target-label "TEST" \
                     --title "Purchase Schema Comparison (QA vs TEST)" \
                     --out "gh-pages/qa-vs-test/purchase.html"
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
                     --source "$SALESDB_QA" --target "$SALESDB_TEST" \
                     --source-label "QA" --target-label "TEST" \
                     --title "Sales Schema Comparison (QA vs TEST)" \
@@ -216,7 +216,7 @@ pipeline {
                                 string(credentialsId: testCredId, variable: 'SVC_TEST')
                             ]) {
                                 sh """
-                                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \\
+                                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \\
                                     --source "\$SVC_QA" --target "\$SVC_TEST" \\
                                     --source-label "QA" --target-label "TEST" \\
                                     --title "${svc.title} Schema Comparison (QA vs TEST)" \\

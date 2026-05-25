@@ -533,15 +533,15 @@ public class SchemaFetcher
     public async Task<string> GetSequenceDefinitionAsync(string sequenceName)
     {
         var query = @"
-                        SELECT 'CREATE SEQUENCE ' || quote_ident(sequence_name) ||
+                        SELECT 'CREATE SEQUENCE ' || quote_ident(sequencename) ||
                                ' START WITH ' || start_value ||
                                ' INCREMENT BY ' || increment_by ||
                                ' MINVALUE ' || min_value ||
                                ' MAXVALUE ' || max_value ||
                                ' CACHE ' || cache_size ||
-                               CASE WHEN is_cycled THEN ' CYCLE' ELSE '' END AS definition
-                        FROM information_schema.sequences
-                        WHERE sequence_schema = 'public' AND sequence_name = @name;
+                               CASE WHEN cycle THEN ' CYCLE' ELSE '' END AS definition
+                        FROM pg_sequences
+                        WHERE schemaname = 'public' AND sequencename = @name;
                     ";
 
         var parameters = new Dictionary<string, object>
