@@ -5,5 +5,7 @@ public class SchemaComparisonReport
 {
     public string Title { get; set; } = "Schema Comparison Report";
     public DateTime GeneratedOn { get; set; } = DateTime.UtcNow;
+    public string SourceLabel { get; set; } = "Source";
+    public string TargetLabel { get; set; } = "Target";
     public List<ComparisonResult> Results { get; set; } = new();
 }

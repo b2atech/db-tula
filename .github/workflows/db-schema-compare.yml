@@ -61,8 +61,10 @@ jobs:
             dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
               --source "$SOURCE_CONN" \
               --target "$TARGET_CONN" \
+              --source-label "QA" \
+              --target-label "PROD" \
               --title "${service} Schema Comparison Report (QA vs PROD)" \
-              --out "gh-pages/qa-vs-prod/${service}.html"              
+              --out "gh-pages/qa-vs-prod/${service}.html"
           done
 
       - name: Run Schema Comparison for QA vs TEST
@@ -83,6 +85,8 @@ jobs:
             dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
               --source "$SOURCE_CONN" \
               --target "$TARGET_CONN" \
+              --source-label "QA" \
+              --target-label "TEST" \
               --title "${service} Schema Comparison Report (QA vs TEST)" \
               --out "gh-pages/qa-vs-test/${service}.html"
           done

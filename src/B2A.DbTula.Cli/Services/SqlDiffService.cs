@@ -47,7 +47,7 @@ public class SqlDiffService
     /// </summary>
     /// <param name="diffResult">Computed diff result</param>
     /// <returns>HTML string for side-by-side diff visualization</returns>
-    public string GenerateSideBySideHtml(SqlDiffResult diffResult)
+    public string GenerateSideBySideHtml(SqlDiffResult diffResult, string sourceLabel = "Source", string targetLabel = "Target")
     {
         if (!diffResult.HasDifferences)
         {
@@ -66,14 +66,14 @@ public class SqlDiffService
         var rightLines = diffResult.NewText.Lines;
         var maxLines = Math.Max(leftLines.Count, rightLines.Count);
         
-        var html = @"
+        var html = $@"
             <div class='sql-diff-container'>
                 <div class='sql-diff-header'>
                     <div class='sql-diff-pane-header source-header'>
-                        <i class='bi bi-file-text'></i> Source Script
+                        <i class='bi bi-file-text'></i> {sourceLabel} Script
                     </div>
                     <div class='sql-diff-pane-header target-header'>
-                        <i class='bi bi-file-text'></i> Target Script
+                        <i class='bi bi-file-text'></i> {targetLabel} Script
                     </div>
                 </div>
                 <div class='sql-diff-content'>";

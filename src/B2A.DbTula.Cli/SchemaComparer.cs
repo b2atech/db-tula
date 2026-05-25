@@ -28,6 +28,7 @@ namespace B2A.DbTula.Cli;
 public class SchemaComparer : ISchemaComparer
 {
     private readonly SqlDiffService _sqlDiffService;
+    private ComparisonOptions _currentOptions = new();
 
     public SchemaComparer()
     {
@@ -41,6 +42,7 @@ public class SchemaComparer : ISchemaComparer
         ComparisonOptions? options = null)
     {
         options ??= new ComparisonOptions();
+        _currentOptions = options;
         var results = new List<ComparisonResult>();
 
         progressLogger?.Invoke(0, 0, "🔍 Fetching schema objects...", false);
@@ -170,6 +172,28 @@ public class SchemaComparer : ISchemaComparer
             progressLogger,
             options);
 
+        // --- SEQUENCES ---
+        var sourceSequences = await sourceProvider.GetSequencesAsync();
+        var targetSequences = await targetProvider.GetSequencesAsync();
+        var targetSequenceSet = new HashSet<string>(targetSequences, StringComparer.OrdinalIgnoreCase);
+        var sourceSequenceSet = new HashSet<string>(sourceSequences, StringComparer.OrdinalIgnoreCase);
+
+        progressLogger?.Invoke(0, 0, "🔢 Comparing sequences...", false);
+
+        foreach (var seq in sourceSequences)
+        {
+            if (!targetSequenceSet.Contains(seq))
+            {
+                var def = await sourceProvider.GetSequenceDefinitionAsync(seq);
+                results.Add(CreateResult(seq, SchemaObjectType.Sequence, ComparisonStatus.MissingInTarget, def ?? ""));
+            }
+        }
+
+        foreach (var seq in targetSequences.Where(s => !sourceSequenceSet.Contains(s)))
+        {
+            results.Add(CreateResult(seq, SchemaObjectType.Sequence, ComparisonStatus.MissingInSource, ""));
+        }
+
         progressLogger?.Invoke(0, 0, "✅ Schema comparison completed.", false);
         return results;
     }
@@ -245,7 +269,7 @@ public class SchemaComparer : ISchemaComparer
             };
 
             // Enhance with side-by-side diff information
-            EnhanceComparisonResultWithDiff(res, source.CreateScript, target.CreateScript);
+            EnhanceComparisonResultWithDiff(res, source.CreateScript, target.CreateScript, _currentOptions.SourceLabel, _currentOptions.TargetLabel);
             
             results.Add(res);
         }
@@ -473,39 +497,47 @@ public class SchemaComparer : ISchemaComparer
         return status;
     }
 
-    /// <summary>
-    /// Compare check constraints and unique constraints by semantics, not names/text
-    /// This is a placeholder for when constraint models are added to the core library
-    /// </summary>
-    private static Task<ComparisonStatus> CompareConstraintsAsync(
+    private static async Task<ComparisonStatus> CompareConstraintsAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         TableDefinition source,
         TableDefinition target,
         List<ComparisonSubResult> subResults)
     {
-        // Placeholder for constraint comparison
-        // When constraint models are available, this would:
-        // 1. Compare check constraints by normalized expressions (whitespace-insensitive)
-        // 2. Compare unique constraints by column sets, not names
-        // 3. Handle provider-specific constraint syntax differences
-        
-        try
+        var status = ComparisonStatus.Match;
+
+        var sourceUcByStructure = source.UniqueConstraints
+            .GroupBy(uc => uc.GetStructuralKey(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var targetUcByStructure = target.UniqueConstraints
+            .GroupBy(uc => uc.GetStructuralKey(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var allKeys = sourceUcByStructure.Keys.Union(targetUcByStructure.Keys, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var key in allKeys)
         {
-            // For now, just verify that the structural signatures handle constraints
-            // The structural signature in TableDefinition will need to be enhanced
-            // to include constraint information when constraint models are added
-            
-            // Placeholder: if we had constraint information, we would compare them here
-            // similar to how we compare FKs and indexes by structure
-            
-            return Task.FromResult(ComparisonStatus.Match);
+            var inSource = sourceUcByStructure.TryGetValue(key, out var sourceUc);
+            var inTarget = targetUcByStructure.TryGetValue(key, out var targetUc);
+
+            if (inSource && !inTarget)
+            {
+                var script = await sourceProvider.GetUniqueConstraintCreateScriptAsync(source.Name, sourceUc!.Name);
+                subResults.Add(new("UniqueConstraints", ComparisonStatus.MissingInTarget,
+                    $"Unique constraint on ({key}) missing in target", script ?? ""));
+                status = ComparisonStatus.Mismatch;
+            }
+            else if (!inSource && inTarget)
+            {
+                var script = await targetProvider.GetUniqueConstraintCreateScriptAsync(target.Name, targetUc!.Name);
+                subResults.Add(new("UniqueConstraints", ComparisonStatus.MissingInSource,
+                    $"Unique constraint on ({key}) missing in source", script ?? ""));
+                status = ComparisonStatus.Mismatch;
+            }
         }
-        catch (Exception)
-        {
-            // If constraint comparison fails, don't fail the entire table comparison
-            return Task.FromResult(ComparisonStatus.Match);
-        }
+
+        return status;
     }
 
     private string? BuildDiffScript(TableDefinition source, TableDefinition target, List<ComparisonSubResult> subResults, ComparisonStatus status)
@@ -531,20 +563,18 @@ public class SchemaComparer : ISchemaComparer
         return sb.ToString().Trim();
     }
 
-    private void EnhanceComparisonResultWithDiff(ComparisonResult result, string? sourceScript, string? targetScript)
+    private void EnhanceComparisonResultWithDiff(ComparisonResult result, string? sourceScript, string? targetScript, string sourceLabel = "Source", string targetLabel = "Target")
     {
-        // Set source and target scripts
         result.SourceScript = sourceScript?.Trim();
         result.TargetScript = targetScript?.Trim();
 
-        // Generate side-by-side diff if there are differences
-        if (result.Status != ComparisonStatus.Match && 
+        if (result.Status != ComparisonStatus.Match &&
             (!string.IsNullOrWhiteSpace(sourceScript) || !string.IsNullOrWhiteSpace(targetScript)))
         {
             var diffResult = _sqlDiffService.ComputeDiff(sourceScript, targetScript);
             if (diffResult.HasDifferences)
             {
-                result.SideBySideDiffHtml = _sqlDiffService.GenerateSideBySideHtml(diffResult);
+                result.SideBySideDiffHtml = _sqlDiffService.GenerateSideBySideHtml(diffResult, sourceLabel, targetLabel);
             }
         }
     }
@@ -624,8 +654,8 @@ public class SchemaComparer : ISchemaComparer
                 continue;
             }
 
-            var sourceDef = await sourceProvider.GetFunctionDefinitionAsync(source.Name);
-            var targetDef = await targetProvider.GetFunctionDefinitionAsync(target.Name);
+            var sourceDef = await sourceProvider.GetFunctionDefinitionAsync(source.Name, source.Arguments);
+            var targetDef = await targetProvider.GetFunctionDefinitionAsync(target.Name, target.Arguments);
 
             if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
@@ -637,7 +667,7 @@ public class SchemaComparer : ISchemaComparer
                     Details = "Function definition differs",
                     DiffScript = $"-- SOURCE\n{sourceDef}\n\n-- TARGET\n{targetDef}"
                 };
-                EnhanceComparisonResultWithDiff(result, sourceDef, targetDef);
+                EnhanceComparisonResultWithDiff(result, sourceDef, targetDef, _currentOptions.SourceLabel, _currentOptions.TargetLabel);
                 results.Add(result);
             }
             else
@@ -684,8 +714,8 @@ public class SchemaComparer : ISchemaComparer
                 continue;
             }
 
-            var sourceDef = await sourceProvider.GetProcedureDefinitionAsync(source.Name);
-            var targetDef = await targetProvider.GetProcedureDefinitionAsync(target.Name);
+            var sourceDef = await sourceProvider.GetProcedureDefinitionAsync(source.Name, source.Arguments);
+            var targetDef = await targetProvider.GetProcedureDefinitionAsync(target.Name, target.Arguments);
 
             if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
@@ -697,7 +727,7 @@ public class SchemaComparer : ISchemaComparer
                     Details = "Procedure definition differs",
                     DiffScript = $"-- SOURCE\n{sourceDef}\n\n-- TARGET\n{targetDef}"
                 };
-                EnhanceComparisonResultWithDiff(result, sourceDef, targetDef);
+                EnhanceComparisonResultWithDiff(result, sourceDef, targetDef, _currentOptions.SourceLabel, _currentOptions.TargetLabel);
                 results.Add(result);
             }
             else
@@ -757,7 +787,7 @@ public class SchemaComparer : ISchemaComparer
                     Details = "View definition differs",
                     DiffScript = $"-- SOURCE\n{sourceDef}\n\n-- TARGET\n{targetDef}"
                 };
-                EnhanceComparisonResultWithDiff(result, sourceDef, targetDef);
+                EnhanceComparisonResultWithDiff(result, sourceDef, targetDef, _currentOptions.SourceLabel, _currentOptions.TargetLabel);
                 results.Add(result);
             }
             else
@@ -816,7 +846,7 @@ public class SchemaComparer : ISchemaComparer
                     Details = "Trigger definition differs",
                     DiffScript = $"-- SOURCE\n{sourceDef}\n\n-- TARGET\n{targetDef}"
                 };
-                EnhanceComparisonResultWithDiff(result, sourceDef, targetDef);
+                EnhanceComparisonResultWithDiff(result, sourceDef, targetDef, _currentOptions.SourceLabel, _currentOptions.TargetLabel);
                 results.Add(result);
             }
             else
@@ -853,12 +883,12 @@ public class SchemaComparer : ISchemaComparer
             if (status == ComparisonStatus.MissingInTarget)
             {
                 // Source exists, target doesn't - show source vs empty
-                EnhanceComparisonResultWithDiff(result, diffScript, null);
+                EnhanceComparisonResultWithDiff(result, diffScript, null, _currentOptions.SourceLabel, _currentOptions.TargetLabel);
             }
             else if (status == ComparisonStatus.MissingInSource)
             {
                 // Target exists, source doesn't - show empty vs target
-                EnhanceComparisonResultWithDiff(result, null, diffScript);
+                EnhanceComparisonResultWithDiff(result, null, diffScript, _currentOptions.SourceLabel, _currentOptions.TargetLabel);
             }
             // For Match status, no diff needed
             // For Mismatch, we need to get both source and target - handled elsewhere

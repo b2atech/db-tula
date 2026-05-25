@@ -7,6 +7,7 @@ public class TableDefinition
     public List<PrimaryKeyDefinition> PrimaryKeys { get; set; } = new(); // just column names
     public List<ForeignKeyDefinition> ForeignKeys { get; set; } = new();
     public List<IndexDefinition> Indexes { get; set; } = new();
+    public List<UniqueConstraintDefinition> UniqueConstraints { get; set; } = new();
     public string CreateScript { get; set; } = string.Empty; // full CREATE TABLE script
 
     /// <summary>
@@ -41,7 +42,13 @@ public class TableDefinition
         {
             elements.Add($"IDX:{idx.GetStructuralKey()}");
         }
-        
+
+        // Add normalized unique constraints (sorted by structural key)
+        foreach (var uc in UniqueConstraints.OrderBy(u => u.GetStructuralKey()))
+        {
+            elements.Add($"UQ:{uc.GetStructuralKey()}");
+        }
+
         return string.Join("|", elements);
     }
 

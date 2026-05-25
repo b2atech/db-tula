@@ -87,14 +87,34 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
         return ParseFunctionOrProcedureList(table);
     }
 
-    public async Task<string> GetFunctionDefinitionAsync(string functionName)
+    public async Task<string?> GetFunctionDefinitionAsync(string functionName, string? arguments = null)
     {
-        return await _fetcher.GetFunctionDefinitionAsync(functionName);
+        return await _fetcher.GetFunctionDefinitionAsync(functionName, arguments);
     }
 
-    public async Task<string> GetProcedureDefinitionAsync(string procedureName)
+    public async Task<string?> GetProcedureDefinitionAsync(string procedureName, string? arguments = null)
     {
-        return await _fetcher.GetProcedureDefinitionAsync(procedureName);
+        return await _fetcher.GetProcedureDefinitionAsync(procedureName, arguments);
+    }
+
+    public async Task<IList<UniqueConstraintDefinition>> GetUniqueConstraintsAsync(string tableName)
+    {
+        return await _fetcher.GetUniqueConstraintsListAsync(tableName);
+    }
+
+    public async Task<string?> GetUniqueConstraintCreateScriptAsync(string tableName, string constraintName)
+    {
+        return await _fetcher.GetUniqueConstraintCreateScriptAsync(tableName, constraintName);
+    }
+
+    public async Task<IList<string>> GetSequencesAsync()
+    {
+        return await _fetcher.GetSequenceNamesAsync();
+    }
+
+    public async Task<string?> GetSequenceDefinitionAsync(string sequenceName)
+    {
+        return await _fetcher.GetSequenceDefinitionAsync(sequenceName);
     }
 
     public async Task<string> GetCreateTableScriptAsync(string tableName)
@@ -124,9 +144,9 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
         return await _fetcher.GetViewDefinitionAsync(viewName);
     }
 
-    public async Task<string?> GetTriggerDefinitionAsync(string viewName)
+    public async Task<string?> GetTriggerDefinitionAsync(string triggerName)
     {
-        return await _fetcher.GetTriggerDefinitionAsync(viewName);
+        return await _fetcher.GetTriggerDefinitionAsync(triggerName);
     }
 
     public async Task<IList<DbViewDefinition>> GetViewsAsync()

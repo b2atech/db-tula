@@ -97,8 +97,13 @@ internal class Program
 
                 var comparisonOptions = new ComparisonOptions
                 {
-                    IgnoreOwnership = argsParsed.IgnoreOwnership
+                    IgnoreOwnership = argsParsed.IgnoreOwnership,
+                    SourceLabel = argsParsed.SourceLabel,
+                    TargetLabel = argsParsed.TargetLabel
                 };
+
+                Log.Logger.Information("📊 Source ({SourceLabel}): {Source}", argsParsed.SourceLabel, argsParsed.SourceConnectionString);
+                Log.Logger.Information("📊 Target ({TargetLabel}): {Target}", argsParsed.TargetLabel, argsParsed.TargetConnectionString);
 
                 var comparisonResults = await comparer.CompareAsync(
                     sourceProvider,
@@ -108,15 +113,30 @@ internal class Program
                     argsParsed.TestObjectLimit,
                     comparisonOptions);
 
+                var resultList = comparisonResults.ToList();
+
+                Log.Logger.Information("📋 Fetched {Total} schema objects", resultList.Count);
+                Log.Logger.Information("  ✅ Match:           {Match}", resultList.Count(r => r.Status == B2A.DbTula.Core.Enums.ComparisonStatus.Match));
+                Log.Logger.Information("  ⚠️  Mismatch:        {Mismatch}", resultList.Count(r => r.Status == B2A.DbTula.Core.Enums.ComparisonStatus.Mismatch));
+                Log.Logger.Information("  ❌ Missing in {TargetLabel}: {MissingTarget}", argsParsed.TargetLabel, resultList.Count(r => r.Status == B2A.DbTula.Core.Enums.ComparisonStatus.MissingInTarget));
+                Log.Logger.Information("  ❌ Missing in {SourceLabel}: {MissingSource}", argsParsed.SourceLabel, resultList.Count(r => r.Status == B2A.DbTula.Core.Enums.ComparisonStatus.MissingInSource));
+
+                var byType = resultList
+                    .GroupBy(r => r.ObjectType)
+                    .Select(g => $"{g.Key}={g.Count()}(diff={g.Count(x => x.Status != B2A.DbTula.Core.Enums.ComparisonStatus.Match)})");
+                Log.Logger.Information("  By type: {Types}", string.Join(", ", byType));
+
                 var report = new SchemaComparisonReport
                 {
                     Title = argsParsed.Title,
+                    SourceLabel = argsParsed.SourceLabel,
+                    TargetLabel = argsParsed.TargetLabel,
                     GeneratedOn = DateTime.UtcNow,
-                    Results = comparisonResults.ToList()
+                    Results = resultList
                 };
                 await HtmlReportGenerator.GenerateWithRazorAsync(report, argsParsed.OutputFile);
 
-                Log.Logger.Information("✅ Comparison and report generation completed.");
+                Log.Logger.Information("✅ Report written to: {OutputFile}", argsParsed.OutputFile);
             }
         }
         catch (Exception ex)

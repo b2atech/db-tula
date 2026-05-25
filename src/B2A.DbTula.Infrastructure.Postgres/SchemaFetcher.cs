@@ -97,13 +97,16 @@ public class SchemaFetcher
     #region Get Details of a specific table
     public async Task<TableDefinition> GetTableDefinitionAsync(string tableName)
     {
+        await EnsurePgGetTableDefFunctionExistsAsync();
+
         var columnsTask = GetColumnsListAsync(tableName);
         var pkTask = GetPrimaryKeysListAsync(tableName);
         var fkTask = GetForeignKeysListAsync(tableName);
         var indexTask = GetIndexesListAsync(tableName);
+        var uniqueTask = GetUniqueConstraintsListAsync(tableName);
         var scriptTask = GetCreateTableScriptAsync(tableName);
 
-        await Task.WhenAll(columnsTask, pkTask, fkTask, indexTask, scriptTask);
+        await Task.WhenAll(columnsTask, pkTask, fkTask, indexTask, uniqueTask, scriptTask);
 
         return new TableDefinition
         {
@@ -112,6 +115,7 @@ public class SchemaFetcher
             PrimaryKeys = pkTask.Result,
             ForeignKeys = fkTask.Result,
             Indexes = indexTask.Result,
+            UniqueConstraints = uniqueTask.Result,
             CreateScript = scriptTask.Result
         };
     }
@@ -167,19 +171,20 @@ public class SchemaFetcher
 
     public async Task<List<PrimaryKeyDefinition>> GetPrimaryKeysListAsync(string tableName)
     {
-        var primaryKeys = new List<PrimaryKeyDefinition>();
         var dataTable = await GetPrimaryKeysAsync(tableName);
 
-        foreach (DataRow row in dataTable.Rows)
-        {
-            primaryKeys.Add(new PrimaryKeyDefinition
+        // Group by constraint_name to build one PK with all its columns in ordinal order
+        var primaryKeys = dataTable.AsEnumerable()
+            .GroupBy(row => row["constraint_name"].ToString() ?? string.Empty)
+            .Select(g => new PrimaryKeyDefinition
             {
-                Name = row["constraint_name"].ToString() ?? string.Empty,
-                Columns = new(),// row["column_name"].ToString() ?? string.Empty, // You can populate this from another query if needed
-                //CreateScript = $"ALTER TABLE \"{tableName}\" ADD CONSTRAINT {row["create_script"]};"
-            });
-        }
-
+                Name = g.Key,
+                Columns = g
+                    .Select(r => r["column_name"].ToString() ?? string.Empty)
+                    .Where(c => !string.IsNullOrEmpty(c))
+                    .ToList()
+            })
+            .ToList();
 
         return primaryKeys;
     }
@@ -383,26 +388,112 @@ public class SchemaFetcher
     }
 
 
+    public async Task<List<UniqueConstraintDefinition>> GetUniqueConstraintsListAsync(string tableName)
+    {
+        const string sql = @"
+            SELECT
+                con.conname AS constraint_name,
+                att.attname AS column_name
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            JOIN pg_namespace ns ON ns.oid = rel.relnamespace
+            JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
+            WHERE con.contype = 'u'
+              AND ns.nspname = 'public'
+              AND rel.relname = @tableName
+            ORDER BY con.conname, att.attnum;";
+
+        var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
+        var dataTable = await ExecuteQueryAsync(sql, parameters);
+
+        return dataTable.AsEnumerable()
+            .GroupBy(row => row["constraint_name"].ToString() ?? string.Empty)
+            .Select(g => new UniqueConstraintDefinition
+            {
+                Name = g.Key,
+                Columns = g
+                    .Select(r => r["column_name"].ToString() ?? string.Empty)
+                    .Where(c => !string.IsNullOrEmpty(c))
+                    .ToList()
+            })
+            .ToList();
+    }
+
+    public async Task<string?> GetUniqueConstraintCreateScriptAsync(string tableName, string constraintName)
+    {
+        const string sql = @"
+            SELECT 'ALTER TABLE ""' || rel.relname || '"" ADD CONSTRAINT ""' || con.conname || '"" ' ||
+                   pg_get_constraintdef(con.oid, true) || ';' AS create_script
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            WHERE con.contype = 'u'
+              AND rel.relname = @tableName
+              AND con.conname = @constraintName
+              AND rel.relnamespace = 'public'::regnamespace
+            LIMIT 1;";
+
+        var parameters = new Dictionary<string, object>
+        {
+            { "@tableName", tableName },
+            { "@constraintName", constraintName }
+        };
+
+        var result = await ExecuteQueryAsync(sql, parameters);
+        return result.Rows.Count > 0 ? result.Rows[0]["create_script"]?.ToString() : null;
+    }
+
+    public async Task<IList<string>> GetSequenceNamesAsync()
+    {
+        const string sql = @"
+            SELECT sequence_name
+            FROM information_schema.sequences
+            WHERE sequence_schema = 'public'
+            ORDER BY sequence_name;";
+
+        var dataTable = await ExecuteQueryAsync(sql);
+        return dataTable.AsEnumerable()
+            .Select(row => row["sequence_name"].ToString() ?? string.Empty)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .ToList();
+    }
+
     #endregion
 
-    public async Task<string> GetFunctionDefinitionAsync(string functionName)
+    public async Task<string?> GetFunctionDefinitionAsync(string functionName, string? arguments = null)
     {
-        var query = @"
-                        SELECT pg_get_functiondef(p.oid) AS definition
-                        FROM pg_proc p
-                        JOIN pg_namespace n ON p.pronamespace = n.oid
-                        WHERE p.proname = @name AND n.nspname = 'public'
-                        LIMIT 1;
-                        ";
-        var parameters = new Dictionary<string, object> { { "name", functionName } };
+        string query;
+        Dictionary<string, object> parameters;
+
+        if (!string.IsNullOrWhiteSpace(arguments))
+        {
+            query = @"
+                SELECT pg_get_functiondef(p.oid) AS definition
+                FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE p.proname = @name
+                  AND n.nspname = 'public'
+                  AND pg_get_function_identity_arguments(p.oid) = @arguments
+                LIMIT 1;";
+            parameters = new Dictionary<string, object> { { "name", functionName }, { "arguments", arguments } };
+        }
+        else
+        {
+            query = @"
+                SELECT pg_get_functiondef(p.oid) AS definition
+                FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE p.proname = @name AND n.nspname = 'public'
+                LIMIT 1;";
+            parameters = new Dictionary<string, object> { { "name", functionName } };
+        }
+
         var result = await ExecuteQueryAsync(query, parameters);
         return result.Rows.Count > 0 ? result.Rows[0]["definition"].ToString() : null;
     }
 
-    public async Task<string> GetProcedureDefinitionAsync(string procedureName)
+    public async Task<string?> GetProcedureDefinitionAsync(string procedureName, string? arguments = null)
     {
-        // PostgreSQL treats procedures and functions similarly under the hood
-        return await GetFunctionDefinitionAsync(procedureName);
+        return await GetFunctionDefinitionAsync(procedureName, arguments);
     }
 
     #region Get Indexe and Sequence Definitions

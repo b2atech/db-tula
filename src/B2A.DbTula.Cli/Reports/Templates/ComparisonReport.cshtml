@@ -240,6 +240,9 @@
 </head>
 <body class="container my-4">
     <h3>@Model.Title : @Model.GeneratedOn</h3>
+    <div class="mb-2 text-muted small">
+        <strong>Source (@Model.SourceLabel)</strong> is the reference — comparing what exists in <strong>@Model.SourceLabel</strong> against <strong>@Model.TargetLabel</strong>.
+    </div>
     <div class="mb-3">
         <span><i class="bi bi-check-circle-fill icon-match"></i> Match</span>&nbsp;&nbsp;
         <span><i class="bi bi-x-circle-fill icon-mismatch"></i> Mismatch</span>&nbsp;&nbsp;
@@ -253,11 +256,11 @@
             </div>
             <div class="form-check form-check-inline">
                 <input class="form-check-input" type="checkbox" id="missingSourceOnly" onchange="applyFilters()">
-                <label class="form-check-label" for="missingSourceOnly">Missing in source</label>
+                <label class="form-check-label" for="missingSourceOnly">Missing in @Model.SourceLabel</label>
             </div>
             <div class="form-check form-check-inline">
                 <input class="form-check-input" type="checkbox" id="missingTargetOnly" onchange="applyFilters()">
-                <label class="form-check-label" for="missingTargetOnly">Missing in target</label>
+                <label class="form-check-label" for="missingTargetOnly">Missing in @Model.TargetLabel</label>
             </div>
         </div>
         <div class="d-flex gap-2">

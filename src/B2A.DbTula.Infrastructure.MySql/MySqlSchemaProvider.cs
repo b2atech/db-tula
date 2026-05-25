@@ -94,12 +94,12 @@ namespace B2A.DbTula.Infrastructure.MySql
             return ParseFunctionOrProcedureList(table);
         }
 
-        public async Task<string> GetFunctionDefinitionAsync(string functionName)
+        public async Task<string?> GetFunctionDefinitionAsync(string functionName, string? arguments = null)
         {
             return await _fetcher.GetFunctionDefinitionAsync(functionName);
         }
 
-        public async Task<string> GetProcedureDefinitionAsync(string procedureName)
+        public async Task<string?> GetProcedureDefinitionAsync(string procedureName, string? arguments = null)
         {
             return await _fetcher.GetProcedureDefinitionAsync(procedureName);
         }
@@ -108,6 +108,24 @@ namespace B2A.DbTula.Infrastructure.MySql
         {
             return await _fetcher.GetCreateTableScriptAsync(tableName);
         }
+
+        public Task<IList<UniqueConstraintDefinition>> GetUniqueConstraintsAsync(string tableName)
+        {
+            // MySQL unique constraints are represented as unique indexes — already compared via GetIndexesAsync
+            return Task.FromResult<IList<UniqueConstraintDefinition>>(new List<UniqueConstraintDefinition>());
+        }
+
+        public Task<string?> GetUniqueConstraintCreateScriptAsync(string tableName, string constraintName) =>
+            Task.FromResult<string?>(null);
+
+        public Task<IList<string>> GetSequencesAsync()
+        {
+            // MySQL does not have standalone sequences
+            return Task.FromResult<IList<string>>(new List<string>());
+        }
+
+        public Task<string?> GetSequenceDefinitionAsync(string sequenceName) =>
+            Task.FromResult<string?>(null);
 
         private List<DbFunctionDefinition> ParseFunctionOrProcedureList(DataTable table)
         {

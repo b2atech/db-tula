@@ -11,6 +11,8 @@ public class CliOptions
     public bool TestMode { get; set; } = false;
     public int TestObjectLimit { get; set; }
     public string Title { get; set; } = "Schema Comparison Report";
+    public string SourceLabel { get; set; } = "Source";
+    public string TargetLabel { get; set; } = "Target";
     public bool IgnoreOwnership { get; set; } = true;
 
     // Extraction options
@@ -76,6 +78,12 @@ public class CliOptions
                     break;
                 case "--title":
                     if (i + 1 < args.Length) options.Title = args[++i];
+                    break;
+                case "--source-label":
+                    if (i + 1 < args.Length) options.SourceLabel = args[++i];
+                    break;
+                case "--target-label":
+                    if (i + 1 < args.Length) options.TargetLabel = args[++i];
                     break;
                 case "--ignore-ownership":
                     options.IgnoreOwnership = true;

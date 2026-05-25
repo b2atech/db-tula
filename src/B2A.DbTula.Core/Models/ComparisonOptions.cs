@@ -10,8 +10,6 @@ public class ComparisonOptions
     /// Default is true for ownership-agnostic comparison.
     /// </summary>
     public bool IgnoreOwnership { get; set; } = true;
-
-    /// <summary>
-    /// Additional comparison options can be added here in the future
-    /// </summary>
+    public string SourceLabel { get; set; } = "Source";
+    public string TargetLabel { get; set; } = "Target";
 }
