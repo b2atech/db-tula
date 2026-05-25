@@ -16,7 +16,7 @@ jobs:
       QA_DB_USER: ${{ secrets.QA_DB_USER }}
       QA_DB_PASSWORD: ${{ secrets.QA_DB_PASSWORD }}
 
-      # Target (PROD)
+      # Target (PROD) — 51.79.156.217
       PROD_DB_HOST: ${{ secrets.PROD_DB_HOST }}
       PROD_DB_PORT: ${{ secrets.PROD_DB_PORT }}
       PROD_DB_USER: ${{ secrets.PROD_DB_USER }}
@@ -27,6 +27,7 @@ jobs:
       TEST_DB_PORT: ${{ secrets.TEST_DB_PORT }}
       TEST_DB_USER: ${{ secrets.TEST_DB_USER }}
       TEST_DB_PASSWORD: ${{ secrets.TEST_DB_PASSWORD }}
+
 
     steps:
       - name: Checkout Repo
@@ -47,7 +48,7 @@ jobs:
         run: |
           set -e
           set -x
-          services=("common" "community" "inventory" "payroll" "purchase" "sales")
+          services=("common" "community" "inventory" "payroll" "purchase" "sales" "payment" "document" "agent" "einvoice")
           mkdir -p gh-pages/qa-vs-prod
 
           for service in "${services[@]}"; do
@@ -71,7 +72,7 @@ jobs:
         run: |
           set -e
           set -x
-          services=("common" "community" "inventory" "payroll" "purchase" "sales")
+          services=("common" "community" "inventory" "payroll" "purchase" "sales" "payment" "document" "agent" "einvoice")
           mkdir -p gh-pages/qa-vs-test
 
           for service in "${services[@]}"; do

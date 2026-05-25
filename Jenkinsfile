@@ -11,21 +11,29 @@ pipeline {
 
     environment {
 
-        // QA
+        // QA (54.37.159.71)
         COMMONDB_QA     = credentials('CONNECTIONSTRINGS__COMMONDB_QA')
         COMMUNITYDB_QA  = credentials('CONNECTIONSTRINGS__COMMUNITYDB_QA')
         INVENTORYDB_QA  = credentials('CONNECTIONSTRINGS__INVENTORYDB_QA')
         PAYROLLDB_QA    = credentials('CONNECTIONSTRINGS__PAYROLLDB_QA')
         PURCHASEDB_QA   = credentials('CONNECTIONSTRINGS__PURCHASEDB_QA')
         SALESDB_QA      = credentials('CONNECTIONSTRINGS__SALESDB_QA')
+        PAYMENTDB_QA    = credentials('CONNECTIONSTRINGS__PAYMENTDB_QA')
+        DOCUMENTDB_QA   = credentials('CONNECTIONSTRINGS__DOCUMENTDB_QA')
+        AGENTDB_QA      = credentials('CONNECTIONSTRINGS__AGENTDB_QA')
+        EINVOICEDB_QA   = credentials('CONNECTIONSTRINGS__EINVOICEDB_QA')
 
-        // PROD
+        // PROD (51.79.156.217)
         COMMONDB_PROD     = credentials('CONNECTIONSTRINGS__COMMONDB_PROD')
         COMMUNITYDB_PROD  = credentials('CONNECTIONSTRINGS__COMMUNITYDB_PROD')
         INVENTORYDB_PROD  = credentials('CONNECTIONSTRINGS__INVENTORYDB_PROD')
         PAYROLLDB_PROD    = credentials('CONNECTIONSTRINGS__PAYROLLDB_PROD')
         PURCHASEDB_PROD   = credentials('CONNECTIONSTRINGS__PURCHASEDB_PROD')
         SALESDB_PROD      = credentials('CONNECTIONSTRINGS__SALESDB_PROD')
+        PAYMENTDB_PROD    = credentials('CONNECTIONSTRINGS__PAYMENTDB_PROD')
+        DOCUMENTDB_PROD   = credentials('CONNECTIONSTRINGS__DOCUMENTDB_PROD')
+        AGENTDB_PROD      = credentials('CONNECTIONSTRINGS__AGENTDB_PROD')
+        EINVOICEDB_PROD   = credentials('CONNECTIONSTRINGS__EINVOICEDB_PROD')
 
         // TEST
         COMMONDB_TEST     = credentials('CONNECTIONSTRINGS__COMMONDB_TEST')
@@ -34,6 +42,10 @@ pipeline {
         PAYROLLDB_TEST    = credentials('CONNECTIONSTRINGS__PAYROLLDB_TEST')
         PURCHASEDB_TEST   = credentials('CONNECTIONSTRINGS__PURCHASEDB_TEST')
         SALESDB_TEST      = credentials('CONNECTIONSTRINGS__SALESDB_TEST')
+        PAYMENTDB_TEST    = credentials('CONNECTIONSTRINGS__PAYMENTDB_TEST')
+        DOCUMENTDB_TEST   = credentials('CONNECTIONSTRINGS__DOCUMENTDB_TEST')
+        AGENTDB_TEST      = credentials('CONNECTIONSTRINGS__AGENTDB_TEST')
+        EINVOICEDB_TEST   = credentials('CONNECTIONSTRINGS__EINVOICEDB_TEST')
 
         DO_HOST       = credentials('DO_HOST')
         DO_USER       = credentials('DO_USER')
@@ -90,33 +102,63 @@ pipeline {
 
                     dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
                     --source "$COMMONDB_QA" --target "$COMMONDB_PROD" \
+                    --source-label "QA" --target-label "PROD" \
                     --title "Common Schema Comparison (QA vs PROD)" \
                     --out "gh-pages/qa-vs-prod/common.html"
 
                     dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
                     --source "$COMMUNITYDB_QA" --target "$COMMUNITYDB_PROD" \
+                    --source-label "QA" --target-label "PROD" \
                     --title "Community Schema Comparison (QA vs PROD)" \
                     --out "gh-pages/qa-vs-prod/community.html"
 
                     dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
                     --source "$INVENTORYDB_QA" --target "$INVENTORYDB_PROD" \
+                    --source-label "QA" --target-label "PROD" \
                     --title "Inventory Schema Comparison (QA vs PROD)" \
                     --out "gh-pages/qa-vs-prod/inventory.html"
 
                     dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
                     --source "$PAYROLLDB_QA" --target "$PAYROLLDB_PROD" \
+                    --source-label "QA" --target-label "PROD" \
                     --title "Payroll Schema Comparison (QA vs PROD)" \
                     --out "gh-pages/qa-vs-prod/payroll.html"
 
                     dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
                     --source "$PURCHASEDB_QA" --target "$PURCHASEDB_PROD" \
+                    --source-label "QA" --target-label "PROD" \
                     --title "Purchase Schema Comparison (QA vs PROD)" \
                     --out "gh-pages/qa-vs-prod/purchase.html"
 
                     dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
                     --source "$SALESDB_QA" --target "$SALESDB_PROD" \
+                    --source-label "QA" --target-label "PROD" \
                     --title "Sales Schema Comparison (QA vs PROD)" \
                     --out "gh-pages/qa-vs-prod/sales.html"
+
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$PAYMENTDB_QA" --target "$PAYMENTDB_PROD" \
+                    --source-label "QA" --target-label "PROD" \
+                    --title "Payment Schema Comparison (QA vs PROD)" \
+                    --out "gh-pages/qa-vs-prod/payment.html"
+
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$DOCUMENTDB_QA" --target "$DOCUMENTDB_PROD" \
+                    --source-label "QA" --target-label "PROD" \
+                    --title "Document Schema Comparison (QA vs PROD)" \
+                    --out "gh-pages/qa-vs-prod/document.html"
+
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$AGENTDB_QA" --target "$AGENTDB_PROD" \
+                    --source-label "QA" --target-label "PROD" \
+                    --title "Agent Schema Comparison (QA vs PROD)" \
+                    --out "gh-pages/qa-vs-prod/agent.html"
+
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$EINVOICEDB_QA" --target "$EINVOICEDB_PROD" \
+                    --source-label "QA" --target-label "PROD" \
+                    --title "EInvoice Schema Comparison (QA vs PROD)" \
+                    --out "gh-pages/qa-vs-prod/einvoice.html"
                 '''
             }
         }
@@ -128,33 +170,63 @@ pipeline {
 
                     dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
                     --source "$COMMONDB_QA" --target "$COMMONDB_TEST" \
+                    --source-label "QA" --target-label "TEST" \
                     --title "Common Schema Comparison (QA vs TEST)" \
                     --out "gh-pages/qa-vs-test/common.html"
 
                     dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
                     --source "$COMMUNITYDB_QA" --target "$COMMUNITYDB_TEST" \
+                    --source-label "QA" --target-label "TEST" \
                     --title "Community Schema Comparison (QA vs TEST)" \
                     --out "gh-pages/qa-vs-test/community.html"
 
                     dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
                     --source "$INVENTORYDB_QA" --target "$INVENTORYDB_TEST" \
+                    --source-label "QA" --target-label "TEST" \
                     --title "Inventory Schema Comparison (QA vs TEST)" \
                     --out "gh-pages/qa-vs-test/inventory.html"
 
                     dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
                     --source "$PAYROLLDB_QA" --target "$PAYROLLDB_TEST" \
+                    --source-label "QA" --target-label "TEST" \
                     --title "Payroll Schema Comparison (QA vs TEST)" \
                     --out "gh-pages/qa-vs-test/payroll.html"
 
                     dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
                     --source "$PURCHASEDB_QA" --target "$PURCHASEDB_TEST" \
+                    --source-label "QA" --target-label "TEST" \
                     --title "Purchase Schema Comparison (QA vs TEST)" \
                     --out "gh-pages/qa-vs-test/purchase.html"
 
                     dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
                     --source "$SALESDB_QA" --target "$SALESDB_TEST" \
+                    --source-label "QA" --target-label "TEST" \
                     --title "Sales Schema Comparison (QA vs TEST)" \
                     --out "gh-pages/qa-vs-test/sales.html"
+
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$PAYMENTDB_QA" --target "$PAYMENTDB_TEST" \
+                    --source-label "QA" --target-label "TEST" \
+                    --title "Payment Schema Comparison (QA vs TEST)" \
+                    --out "gh-pages/qa-vs-test/payment.html"
+
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$DOCUMENTDB_QA" --target "$DOCUMENTDB_TEST" \
+                    --source-label "QA" --target-label "TEST" \
+                    --title "Document Schema Comparison (QA vs TEST)" \
+                    --out "gh-pages/qa-vs-test/document.html"
+
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$AGENTDB_QA" --target "$AGENTDB_TEST" \
+                    --source-label "QA" --target-label "TEST" \
+                    --title "Agent Schema Comparison (QA vs TEST)" \
+                    --out "gh-pages/qa-vs-test/agent.html"
+
+                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
+                    --source "$EINVOICEDB_QA" --target "$EINVOICEDB_TEST" \
+                    --source-label "QA" --target-label "TEST" \
+                    --title "EInvoice Schema Comparison (QA vs TEST)" \
+                    --out "gh-pages/qa-vs-test/einvoice.html"
                 '''
             }
         }

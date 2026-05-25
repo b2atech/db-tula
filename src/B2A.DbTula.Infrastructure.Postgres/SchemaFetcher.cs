@@ -9,6 +9,7 @@ public class SchemaFetcher
     private readonly DatabaseConnection _connection;
     private readonly Action<int, int, string, bool> _logger;
     private readonly LogLevel _logLevel;
+    private bool _pgGetTableDefEnsured;
 
     public SchemaFetcher(DatabaseConnection connection, Action<int, int, string, bool> logger, object verbose, LogLevel logLevel = LogLevel.Basic)
     {
@@ -97,7 +98,11 @@ public class SchemaFetcher
     #region Get Details of a specific table
     public async Task<TableDefinition> GetTableDefinitionAsync(string tableName)
     {
-        await EnsurePgGetTableDefFunctionExistsAsync();
+        if (!_pgGetTableDefEnsured)
+        {
+            await EnsurePgGetTableDefFunctionExistsAsync();
+            _pgGetTableDefEnsured = true;
+        }
 
         var columnsTask = GetColumnsListAsync(tableName);
         var pkTask = GetPrimaryKeysListAsync(tableName);
@@ -122,20 +127,22 @@ public class SchemaFetcher
 
     public async Task<DataTable> GetColumnsAsync(string tableName)
     {
-        string query = $@"
-        SELECT 
-            column_name, 
-            data_type, 
-            character_maximum_length, 
+        const string query = @"
+        SELECT
+            column_name,
+            data_type,
+            character_maximum_length,
             is_nullable,
             column_default
-        FROM 
-            information_schema.columns 
-        WHERE 
-            table_name = '{tableName}' 
-            AND table_schema = 'public'";
+        FROM
+            information_schema.columns
+        WHERE
+            table_name = @tableName
+            AND table_schema = 'public'
+        ORDER BY ordinal_position";
 
-        var result = await ExecuteQueryAsync(query);
+        var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
+        var result = await ExecuteQueryAsync(query, parameters);
 
         if (result.Columns.Contains("column_name"))
         {
@@ -218,8 +225,9 @@ public class SchemaFetcher
 
     public async Task<string?> GetCreateTableScriptAsync(string tableName)
     {
-        var query = $"SELECT pg_get_tabledef('{tableName}')"; // Replace with real query if needed
-        var result = await _connection.ExecuteQueryAsync(query);
+        const string query = "SELECT pg_get_tabledef(@tableName)";
+        var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
+        var result = await _connection.ExecuteQueryAsync(query, parameters);
         return result.Rows.Count > 0 ? result.Rows[0][0].ToString() : null;
     }
 
@@ -247,27 +255,29 @@ public class SchemaFetcher
 
     public async Task<DataTable> GetIndexesAsync(string tableName)
     {
-        string query = $@"
-                            SELECT
-                                i.relname AS indexname,
-                                t.relname AS tablename,
-                                a.attname AS columnname,
-                                ix.indisunique AS is_unique,
-                                am.amname AS index_type
-                            FROM
-                                pg_class t
-                                JOIN pg_index ix ON t.oid = ix.indrelid
-                                JOIN pg_class i ON i.oid = ix.indexrelid
-                                JOIN pg_am am ON i.relam = am.oid
-                                JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
-                            WHERE
-                                t.relname = '{tableName}'
-                                AND a.attnum > 0
-                            ORDER BY
-                                i.relname, a.attnum;
-                        ";
+        const string query = @"
+            SELECT
+                i.relname AS indexname,
+                t.relname AS tablename,
+                a.attname AS columnname,
+                ix.indisunique AS is_unique,
+                am.amname AS index_type
+            FROM
+                pg_class t
+                JOIN pg_index ix ON t.oid = ix.indrelid
+                JOIN pg_class i ON i.oid = ix.indexrelid
+                JOIN pg_am am ON i.relam = am.oid
+                JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+                JOIN pg_namespace ns ON ns.oid = t.relnamespace
+            WHERE
+                t.relname = @tableName
+                AND ns.nspname = 'public'
+                AND a.attnum > 0
+            ORDER BY
+                i.relname, a.attnum;";
 
-        return await ExecuteQueryAsync(query);
+        var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
+        return await ExecuteQueryAsync(query, parameters);
     }
 
     public async Task<string?> GetIndexCreateScriptAsync(string indexName)
@@ -345,20 +355,27 @@ public class SchemaFetcher
 
     public async Task<DataTable> GetForeignKeysAsync(string tableName)
     {
-        string query = $@"
-                SELECT
-                    tc.constraint_name AS foreign_key_name,
-                    kcu.column_name,
-                    ccu.table_name AS foreign_table_name,
-                    ccu.column_name AS foreign_column_name
-                FROM information_schema.table_constraints AS tc
-                JOIN information_schema.key_column_usage AS kcu
-                    ON tc.constraint_name = kcu.constraint_name
-                JOIN information_schema.constraint_column_usage AS ccu
-                    ON ccu.constraint_name = tc.constraint_name
-                WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name = '{tableName}' AND tc.table_schema = 'public'";
+        const string query = @"
+            SELECT
+                tc.constraint_name AS foreign_key_name,
+                kcu.column_name,
+                ccu.table_name AS foreign_table_name,
+                ccu.column_name AS foreign_column_name
+            FROM information_schema.table_constraints AS tc
+            JOIN information_schema.key_column_usage AS kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+                AND tc.table_name = kcu.table_name
+            JOIN information_schema.constraint_column_usage AS ccu
+                ON ccu.constraint_name = tc.constraint_name
+                AND ccu.table_schema = tc.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+              AND tc.table_name = @tableName
+              AND tc.table_schema = 'public'";
 
-        return await ExecuteQueryAsync(query);
+        var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
+
+        return await ExecuteQueryAsync(query, parameters);
     }
 
     public async Task<string?> GetForeignKeyCreateScriptAsync(string tableName, string foreignKeyName)
