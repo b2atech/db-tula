@@ -11,41 +11,29 @@ pipeline {
 
     environment {
 
-        // QA (54.37.159.71)
+        // QA (54.37.159.71) — existing services
         COMMONDB_QA     = credentials('CONNECTIONSTRINGS__COMMONDB_QA')
         COMMUNITYDB_QA  = credentials('CONNECTIONSTRINGS__COMMUNITYDB_QA')
         INVENTORYDB_QA  = credentials('CONNECTIONSTRINGS__INVENTORYDB_QA')
         PAYROLLDB_QA    = credentials('CONNECTIONSTRINGS__PAYROLLDB_QA')
         PURCHASEDB_QA   = credentials('CONNECTIONSTRINGS__PURCHASEDB_QA')
         SALESDB_QA      = credentials('CONNECTIONSTRINGS__SALESDB_QA')
-        PAYMENTDB_QA    = credentials('CONNECTIONSTRINGS__PAYMENTDB_QA')
-        DOCUMENTDB_QA   = credentials('CONNECTIONSTRINGS__DOCUMENTDB_QA')
-        AGENTDB_QA      = credentials('CONNECTIONSTRINGS__AGENTDB_QA')
-        EINVOICEDB_QA   = credentials('CONNECTIONSTRINGS__EINVOICEDB_QA')
 
-        // PROD (51.79.156.217)
+        // PROD (51.79.156.217) — existing services
         COMMONDB_PROD     = credentials('CONNECTIONSTRINGS__COMMONDB_PROD')
         COMMUNITYDB_PROD  = credentials('CONNECTIONSTRINGS__COMMUNITYDB_PROD')
         INVENTORYDB_PROD  = credentials('CONNECTIONSTRINGS__INVENTORYDB_PROD')
         PAYROLLDB_PROD    = credentials('CONNECTIONSTRINGS__PAYROLLDB_PROD')
         PURCHASEDB_PROD   = credentials('CONNECTIONSTRINGS__PURCHASEDB_PROD')
         SALESDB_PROD      = credentials('CONNECTIONSTRINGS__SALESDB_PROD')
-        PAYMENTDB_PROD    = credentials('CONNECTIONSTRINGS__PAYMENTDB_PROD')
-        DOCUMENTDB_PROD   = credentials('CONNECTIONSTRINGS__DOCUMENTDB_PROD')
-        AGENTDB_PROD      = credentials('CONNECTIONSTRINGS__AGENTDB_PROD')
-        EINVOICEDB_PROD   = credentials('CONNECTIONSTRINGS__EINVOICEDB_PROD')
 
-        // TEST
+        // TEST — existing services
         COMMONDB_TEST     = credentials('CONNECTIONSTRINGS__COMMONDB_TEST')
         COMMUNITYDB_TEST  = credentials('CONNECTIONSTRINGS__COMMUNITYDB_TEST')
         INVENTORYDB_TEST  = credentials('CONNECTIONSTRINGS__INVENTORYDB_TEST')
         PAYROLLDB_TEST    = credentials('CONNECTIONSTRINGS__PAYROLLDB_TEST')
         PURCHASEDB_TEST   = credentials('CONNECTIONSTRINGS__PURCHASEDB_TEST')
         SALESDB_TEST      = credentials('CONNECTIONSTRINGS__SALESDB_TEST')
-        PAYMENTDB_TEST    = credentials('CONNECTIONSTRINGS__PAYMENTDB_TEST')
-        DOCUMENTDB_TEST   = credentials('CONNECTIONSTRINGS__DOCUMENTDB_TEST')
-        AGENTDB_TEST      = credentials('CONNECTIONSTRINGS__AGENTDB_TEST')
-        EINVOICEDB_TEST   = credentials('CONNECTIONSTRINGS__EINVOICEDB_TEST')
 
         DO_HOST       = credentials('DO_HOST')
         DO_USER       = credentials('DO_USER')
@@ -135,31 +123,38 @@ pipeline {
                     --source-label "QA" --target-label "PROD" \
                     --title "Sales Schema Comparison (QA vs PROD)" \
                     --out "gh-pages/qa-vs-prod/sales.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
-                    --source "$PAYMENTDB_QA" --target "$PAYMENTDB_PROD" \
-                    --source-label "QA" --target-label "PROD" \
-                    --title "Payment Schema Comparison (QA vs PROD)" \
-                    --out "gh-pages/qa-vs-prod/payment.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
-                    --source "$DOCUMENTDB_QA" --target "$DOCUMENTDB_PROD" \
-                    --source-label "QA" --target-label "PROD" \
-                    --title "Document Schema Comparison (QA vs PROD)" \
-                    --out "gh-pages/qa-vs-prod/document.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
-                    --source "$AGENTDB_QA" --target "$AGENTDB_PROD" \
-                    --source-label "QA" --target-label "PROD" \
-                    --title "Agent Schema Comparison (QA vs PROD)" \
-                    --out "gh-pages/qa-vs-prod/agent.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
-                    --source "$EINVOICEDB_QA" --target "$EINVOICEDB_PROD" \
-                    --source-label "QA" --target-label "PROD" \
-                    --title "EInvoice Schema Comparison (QA vs PROD)" \
-                    --out "gh-pages/qa-vs-prod/einvoice.html"
                 '''
+
+                // payment, document, agent, einvoice — added via withCredentials so missing
+                // credentials are skipped gracefully until they are created in Jenkins
+                script {
+                    def newServices = [
+                        [id: 'PAYMENT',  title: 'Payment'],
+                        [id: 'DOCUMENT', title: 'Document'],
+                        [id: 'AGENT',    title: 'Agent'],
+                        [id: 'EINVOICE', title: 'EInvoice']
+                    ]
+                    newServices.each { svc ->
+                        def qaCredId   = "CONNECTIONSTRINGS__${svc.id}DB_QA"
+                        def prodCredId = "CONNECTIONSTRINGS__${svc.id}DB_PROD"
+                        try {
+                            withCredentials([
+                                string(credentialsId: qaCredId,   variable: 'SVC_QA'),
+                                string(credentialsId: prodCredId, variable: 'SVC_PROD')
+                            ]) {
+                                sh """
+                                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \\
+                                    --source "\$SVC_QA" --target "\$SVC_PROD" \\
+                                    --source-label "QA" --target-label "PROD" \\
+                                    --title "${svc.title} Schema Comparison (QA vs PROD)" \\
+                                    --out "gh-pages/qa-vs-prod/${svc.id.toLowerCase()}.html"
+                                """
+                            }
+                        } catch (e) {
+                            echo "⚠️  Skipping ${svc.title} QA vs PROD — credentials not yet configured: ${e.message}"
+                        }
+                    }
+                }
             }
         }
 
@@ -203,31 +198,36 @@ pipeline {
                     --source-label "QA" --target-label "TEST" \
                     --title "Sales Schema Comparison (QA vs TEST)" \
                     --out "gh-pages/qa-vs-test/sales.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
-                    --source "$PAYMENTDB_QA" --target "$PAYMENTDB_TEST" \
-                    --source-label "QA" --target-label "TEST" \
-                    --title "Payment Schema Comparison (QA vs TEST)" \
-                    --out "gh-pages/qa-vs-test/payment.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
-                    --source "$DOCUMENTDB_QA" --target "$DOCUMENTDB_TEST" \
-                    --source-label "QA" --target-label "TEST" \
-                    --title "Document Schema Comparison (QA vs TEST)" \
-                    --out "gh-pages/qa-vs-test/document.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
-                    --source "$AGENTDB_QA" --target "$AGENTDB_TEST" \
-                    --source-label "QA" --target-label "TEST" \
-                    --title "Agent Schema Comparison (QA vs TEST)" \
-                    --out "gh-pages/qa-vs-test/agent.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \
-                    --source "$EINVOICEDB_QA" --target "$EINVOICEDB_TEST" \
-                    --source-label "QA" --target-label "TEST" \
-                    --title "EInvoice Schema Comparison (QA vs TEST)" \
-                    --out "gh-pages/qa-vs-test/einvoice.html"
                 '''
+
+                script {
+                    def newServices = [
+                        [id: 'PAYMENT',  title: 'Payment'],
+                        [id: 'DOCUMENT', title: 'Document'],
+                        [id: 'AGENT',    title: 'Agent'],
+                        [id: 'EINVOICE', title: 'EInvoice']
+                    ]
+                    newServices.each { svc ->
+                        def qaCredId   = "CONNECTIONSTRINGS__${svc.id}DB_QA"
+                        def testCredId = "CONNECTIONSTRINGS__${svc.id}DB_TEST"
+                        try {
+                            withCredentials([
+                                string(credentialsId: qaCredId,   variable: 'SVC_QA'),
+                                string(credentialsId: testCredId, variable: 'SVC_TEST')
+                            ]) {
+                                sh """
+                                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release -- \\
+                                    --source "\$SVC_QA" --target "\$SVC_TEST" \\
+                                    --source-label "QA" --target-label "TEST" \\
+                                    --title "${svc.title} Schema Comparison (QA vs TEST)" \\
+                                    --out "gh-pages/qa-vs-test/${svc.id.toLowerCase()}.html"
+                                """
+                            }
+                        } catch (e) {
+                            echo "⚠️  Skipping ${svc.title} QA vs TEST — credentials not yet configured: ${e.message}"
+                        }
+                    }
+                }
             }
         }
 
