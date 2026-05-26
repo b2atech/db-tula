@@ -233,7 +233,7 @@ pipeline {
 
         stage('Deploy Reports to OVH') {
             steps {
-                sshagent (credentials: [env.DO_SSH_KEY_ID]) {
+                sshagent (credentials: ['DO_SSH_KEY']) {
                     sh '''
                         scp -o StrictHostKeyChecking=no -r gh-pages/* \
                         ${DO_USER}@${DO_HOST}:/var/www/dbtula-site
