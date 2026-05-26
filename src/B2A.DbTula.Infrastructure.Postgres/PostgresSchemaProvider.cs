@@ -2,13 +2,15 @@ using B2a.DbTula.Core.Abstractions;
 using B2A.DbTula.Core.Enums;
 using B2A.DbTula.Core.Models;
 using B2A.DbTula.Infrastructure.Postgres;
+using Npgsql;
 using System.Data;
 
 namespace B2a.DbTula.Infrastructure.Postgres;
 
 
-public class PostgresSchemaProvider : IDatabaseSchemaProvider
+public class PostgresSchemaProvider : IDatabaseSchemaProvider, IDatabaseIdentityProvider
 {
+    private readonly string _connectionString;
     private readonly SchemaFetcher _fetcher;
     private readonly DatabaseConnection _connection;
     public PostgresSchemaProvider(
@@ -17,6 +19,10 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
         bool verbose,
         LogLevel logLevel = LogLevel.Basic)
     {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("PostgreSQL connection string cannot be empty.", nameof(connectionString));
+
+        _connectionString = connectionString;
         _connection = new DatabaseConnection(connectionString, logger, verbose, logLevel);
         _fetcher = new SchemaFetcher(_connection, logger, verbose, logLevel);
     }
@@ -204,6 +210,44 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
         return list;
     }
 
+    public async Task<DatabaseIdentity> GetDatabaseIdentityAsync(CancellationToken cancellationToken = default)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(_connectionString);
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        const string sql = """
+        SELECT
+            inet_server_addr()::text AS server_address,
+            inet_server_port() AS server_port,
+            current_database() AS database_name,
+            current_user AS user_name,
+            version() AS version;
+        """;
+
+        await using var command = new NpgsqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            throw new InvalidOperationException("Unable to read PostgreSQL database identity.");
+        }
+
+        return new DatabaseIdentity
+        {
+            ProviderName = "PostgreSQL",
+            ConfiguredHost = builder.Host,
+            ConfiguredPort = builder.Port,
+            ConfiguredDatabase = builder.Database,
+            ConfiguredUsername = builder.Username,
+            ServerAddress = reader["server_address"]?.ToString(),
+            ServerPort = reader["server_port"] == DBNull.Value ? null : Convert.ToInt32(reader["server_port"]),
+            CurrentDatabase = reader["database_name"]?.ToString() ?? string.Empty,
+            CurrentUser = reader["user_name"]?.ToString() ?? string.Empty,
+            Version = reader["version"]?.ToString() ?? string.Empty
+        };
+    }
 }
 
 

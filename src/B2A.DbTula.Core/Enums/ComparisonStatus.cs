@@ -5,5 +5,6 @@ public enum ComparisonStatus
     Match,
     MissingInSource,
     MissingInTarget,
-    Mismatch
+    Mismatch,
+    Unknown
 }
