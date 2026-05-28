@@ -40,32 +40,32 @@
 |---|---|---|
 | 11 | Add CheckConstraintDefinition model + comparison | ✅ Done | commit `a378aa6` |
 | 12 | Full sequence definition comparison | ✅ Done | commit `a378aa6` |
-| 13 | Add EnumTypeDefinition model + comparison | ⏳ Pending | Next session |
+| 13 | Add EnumTypeDefinition model + comparison | ✅ Done | commit `629110e` |
 
 ## Phase 4 — Reporting
 
-| # | Task | Status |
-|---|---|---|
-| 14 | Add --fail-on-drift exit codes | ⏳ Pending |
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 14 | Add --fail-on-drift exit codes | ✅ Done | commit `629110e` |
 
 ## Phase 5 — Sync Script Generation
 
-| # | Task | Status |
-|---|---|---|
-| 15 | Implement SyncScriptGenerator | ⏳ Pending |
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 15 | Implement SyncScriptGenerator | ✅ Done | commit `629110e` |
 
 ## Phase 6 — Tests
 
-| # | Task | Status |
-|---|---|---|
-| 16 | Create B2A.DbTula.Core.Tests (unit tests) | ⏳ Pending |
-| 17 | Create B2A.DbTula.Integration.Tests (Docker Postgres) | ⏳ Pending |
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 16 | Create B2A.DbTula.Core.Tests (unit tests) | ✅ Done | 38/38 passing — commit `629110e` |
+| 17 | Create B2A.DbTula.Integration.Tests (Docker Postgres) | ✅ Done | 11 tests — commit `629110e` |
 
 ## Phase 7 — CI/CD Hardening
 
-| # | Task | Status |
-|---|---|---|
-| 18 | Harden Jenkinsfile | ⏳ Pending |
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 18 | Harden Jenkinsfile | ✅ Done | commit `629110e` |
 
 ---
 
@@ -76,6 +76,7 @@
 | 2026-05-28 | Architecture review, memory files, task creation | — |
 | 2026-05-28 | **Phase 1 complete** — all 7 tasks (6 bugs + ProviderKind) | commit `386f565`, 0 build errors |
 | 2026-05-28 | **Phase 2+3 complete** — bulk snapshot (26 queries total), check constraints, full sequence comparison | commit `a378aa6`, 0 build errors |
+| 2026-05-28 | **ALL PHASES COMPLETE (3-7)** — enums, exit codes, sync generator, 38 unit tests, 11 integration tests, Jenkinsfile | commit `629110e` |
 
 ---
 
