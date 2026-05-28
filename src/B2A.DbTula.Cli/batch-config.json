@@ -1,0 +1,184 @@
+﻿{
+  "extractionJobs": [
+    //{
+    //  "name": "QA Database 1",
+    //  "connectionString": "Server=db.qa.example.com;Port=5432;Database=qa-db1;User Id=user1;Password=pass1;",
+    //  "dbType": "postgres",
+    //  "outputDir": "./extracted-qa-db1",
+    //  "objects": "functions,procedures,views,triggers",
+    //  "overwrite": true
+    //},
+    //{
+    //  "name": "QA Database 2",
+    //  "connectionString": "Server=db.qa.example.com;Port=5432;Database=qa-db2;User Id=user2;Password=pass2;",
+    //  "dbType": "postgres",
+    //  "outputDir": "./extracted-qa-db2",
+    //  "objects": "all",
+    //  "overwrite": true
+    //},
+    //{
+    //  "name": "QA Database 3",
+    //  "connectionString": "Server=db.qa.example.com;Port=5432;Database=qa-db3;User Id=user3;Password=pass3;",
+    //  "dbType": "postgres",
+    //  "outputDir": "./extracted-qa-db3",
+    //  "objects": "views,functions",
+    //  "overwrite": true
+    //}
+  ],
+
+  "comparisonJobs": [
+    {
+      "name": "Agent",
+      "sourceConnectionString": "Host=127.0.0.1;Port=15432;Database=qa-dhanman-agent;Username=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;Timeout=15;Command Timeout=120;Pooling=false;",
+      "targetConnectionString": "Host=127.0.0.1;Port=25432;Database=prod-dhanman-agent;Username=dhanmanprod;Password=dmB@yce-Codd(x->y);Timeout=15;Command Timeout=120;Pooling=false;",
+      "sourceType": "postgres",
+      "targetType": "postgres",
+      "outputFile": "./comparison-Agent.html",
+      "title": "Agent",
+      "ignoreOwnership": true
+    },
+    {
+      "name": "Common",
+      "sourceConnectionString": "Host=127.0.0.1;Port=15432;Database=qa-dhanman-common;Username=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;Timeout=15;Command Timeout=120;Pooling=false;",
+      "targetConnectionString": "Host=127.0.0.1;Port=25432;Database=prod-dhanman-common;Username=dhanmanprod;Password=dmB@yce-Codd(x->y);Timeout=15;Command Timeout=120;Pooling=false;",
+      "sourceType": "postgres",
+      "targetType": "postgres",
+      "outputFile": "./comparison-Common.html",
+      "title": "Common",
+      "ignoreOwnership": true
+    },
+    {
+      "name": "Sales",
+      "sourceConnectionString": "Host=127.0.0.1;Port=15432;Database=qa-dhanman-sales;Username=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;Timeout=15;Command Timeout=120;Pooling=false;",
+      "targetConnectionString": "Host=127.0.0.1;Port=25432;Database=prod-dhanman-sales;Username=dhanmanprod;Password=dmB@yce-Codd(x->y);Timeout=15;Command Timeout=120;Pooling=false;",
+      "sourceType": "postgres",
+      "targetType": "postgres",
+      "outputFile": "./comparison-Sales.html",
+      "title": "Sales",
+      "ignoreOwnership": true
+    },
+    {
+      "name": "Purchase",
+      "sourceConnectionString": "Host=127.0.0.1;Port=15432;Database=qa-dhanman-purchase;Username=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;Timeout=15;Command Timeout=120;Pooling=false;",
+      "targetConnectionString": "Host=127.0.0.1;Port=25432;Database=prod-dhanman-purchase;Username=dhanmanprod;Password=dmB@yce-Codd(x->y);Timeout=15;Command Timeout=120;Pooling=false;",
+      "sourceType": "postgres",
+      "targetType": "postgres",
+      "outputFile": "./comparison-Purchase.html",
+      "title": "Purchase",
+      "ignoreOwnership": true
+    },
+    {
+      "name": "Community",
+      "sourceConnectionString": "Host=127.0.0.1;Port=15432;Database=qa-dhanman-community;Username=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;Timeout=15;Command Timeout=120;Pooling=false;",
+      "targetConnectionString": "Host=127.0.0.1;Port=25432;Database=prod-dhanman-community;Username=dhanmanprod;Password=dmB@yce-Codd(x->y);Timeout=15;Command Timeout=120;Pooling=false;",
+      "sourceType": "postgres",
+      "targetType": "postgres",
+      "outputFile": "./comparison-Community.html",
+      "title": "Community",
+      "ignoreOwnership": true
+    },
+    {
+      "name": "Payroll",
+      "sourceConnectionString": "Host=127.0.0.1;Port=15432;Database=qa-dhanman-payroll;Username=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;Timeout=15;Command Timeout=120;Pooling=false;",
+      "targetConnectionString": "Host=127.0.0.1;Port=25432;Database=prod-dhanman-payroll;Username=dhanmanprod;Password=dmB@yce-Codd(x->y);Timeout=15;Command Timeout=120;Pooling=false;",
+      "sourceType": "postgres",
+      "targetType": "postgres",
+      "outputFile": "./comparison-Payroll.html",
+      "title": "Payroll",
+      "ignoreOwnership": true
+    },
+    {
+      "name": "Inventory",
+      "sourceConnectionString": "Host=127.0.0.1;Port=15432;Database=qa-dhanman-inventory;Username=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;Timeout=15;Command Timeout=120;Pooling=false;",
+      "targetConnectionString": "Host=127.0.0.1;Port=25432;Database=prod-dhanman-inventory;Username=dhanmanprod;Password=dmB@yce-Codd(x->y);Timeout=15;Command Timeout=120;Pooling=false;",
+      "sourceType": "postgres",
+      "targetType": "postgres",
+      "outputFile": "./comparison-Inventory.html",
+      "title": "Inventory",
+      "ignoreOwnership": true
+    },
+    {
+      "name": "Payment",
+      "sourceConnectionString": "Host=127.0.0.1;Port=15432;Database=qa-dhanman-payment;Username=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;Timeout=15;Command Timeout=120;Pooling=false;",
+      "targetConnectionString": "Host=127.0.0.1;Port=25432;Database=prod-dhanman-payment;Username=dhanmanprod;Password=dmB@yce-Codd(x->y);Timeout=15;Command Timeout=120;Pooling=false;",
+      "sourceType": "postgres",
+      "targetType": "postgres",
+      "outputFile": "./comparison-Payment.html",
+      "title": "Payment",
+      "ignoreOwnership": true
+    }
+  ]
+ 
+  //  "comparisonJobs": [
+  //    {
+  //      "name": "Common",
+  //      "sourceConnectionString": "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;",
+  //      "targetConnectionString": "Server=db.prod.dhanman.com;Port=5432;Database=prod-dhanman-common;User Id=dhanmanprod;Password=dmB@yce-Codd(x->y);",
+  //      "sourceType": "postgres",
+  //      "targetType": "postgres",
+  //      "outputFile": "./comparison-Common.html",
+  //      "title": "Common",
+  //      "ignoreOwnership": true
+  //    },
+  //    {
+  //      "name": "Sales",
+  //      "sourceConnectionString": "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-sales;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;",
+  //      "targetConnectionString": "Server=db.prod.dhanman.com;Port=5432;Database=prod-dhanman-sales;User Id=dhanmanprod;Password=dmB@yce-Codd(x->y);",
+  //      "sourceType": "postgres",
+  //      "targetType": "postgres",
+  //      "outputFile": "./comparison-Sales.html",
+  //      "title": "Sales",
+  //      "ignoreOwnership": true
+  //    },
+  //    {
+  //      "name": "Purchase",
+  //      "sourceConnectionString": "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-purchase;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;",
+  //      "targetConnectionString": "Server=db.prod.dhanman.com;Port=5432;Database=prod-dhanman-purchase;User Id=dhanmanprod;Password=dmB@yce-Codd(x->y);",
+  //      "sourceType": "postgres",
+  //      "targetType": "postgres",
+  //      "outputFile": "./comparison-Purchase.html",
+  //      "title": "Purchase",
+  //      "ignoreOwnership": true
+  //    },
+  //    {
+  //      "name": "Community",
+  //      "sourceConnectionString": "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-community;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;",
+  //      "targetConnectionString": "Server=db.prod.dhanman.com;Port=5432;Database=prod-dhanman-community;User Id=dhanmanprod;Password=dmB@yce-Codd(x->y);",
+  //      "sourceType": "postgres",
+  //      "targetType": "postgres",
+  //      "outputFile": "./comparison-Community.html",
+  //      "title": "Community",
+  //      "ignoreOwnership": true
+  //    },
+  //    {
+  //      "name": "Payroll",
+  //      "sourceConnectionString": "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-payroll;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;",
+  //      "targetConnectionString": "Server=db.prod.dhanman.com;Port=5432;Database=prod-dhanman-payroll;User Id=dhanmanprod;Password=dmB@yce-Codd(x->y);",
+  //      "sourceType": "postgres",
+  //      "targetType": "postgres",
+  //      "outputFile": "./comparison-Payroll.html",
+  //      "title": "Payroll",
+  //      "ignoreOwnership": true
+  //    },
+  //    {
+  //      "name": "Inventory",
+  //      "sourceConnectionString": "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-inventory;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;",
+  //      "targetConnectionString": "Server=db.prod.dhanman.com;Port=5432;Database=prod-dhanman-inventory;User Id=dhanmanprod;Password=dmB@yce-Codd(x->y);",
+  //      "sourceType": "postgres",
+  //      "targetType": "postgres",
+  //      "outputFile": "./comparison-Inventory.html",
+  //      "title": "Inventory",
+  //      "ignoreOwnership": true
+  //    },
+  //    {
+  //      "name": "Payment",
+  //      "sourceConnectionString": "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-payment;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;",
+  //      "targetConnectionString": "Server=db.prod.dhanman.com;Port=5432;Database=prod-dhanman-payment;User Id=dhanmanprod;Password=dmB@yce-Codd(x->y);",
+  //      "sourceType": "postgres",
+  //      "targetType": "postgres",
+  //      "outputFile": "./comparison-Payment.html",
+  //      "title": "Payment",
+  //      "ignoreOwnership": true
+  //    }
+  //  ]
+}
