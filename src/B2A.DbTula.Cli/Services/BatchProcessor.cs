@@ -9,7 +9,7 @@ using Serilog;
 using System.Text.Json;
 
 namespace B2A.DbTula.Cli.Services;
-
+ 
 public class BatchProcessor
 {
     public static async Task<BatchConfiguration?> LoadBatchConfigurationAsync(string filePath)
@@ -42,14 +42,14 @@ public class BatchProcessor
     {
         var totalJobs = (config.ExtractionJobs?.Count ?? 0) + (config.ComparisonJobs?.Count ?? 0);
         var currentJob = 0;
+        var failedJobs = 0;
 
         Log.Logger.Information("🚀 Starting batch processing with {TotalJobs} jobs", totalJobs);
 
-        // Process extraction jobs
         if (config.ExtractionJobs != null && config.ExtractionJobs.Any())
         {
             Log.Logger.Information("📤 Processing {Count} extraction jobs", config.ExtractionJobs.Count);
-            
+
             foreach (var job in config.ExtractionJobs)
             {
                 currentJob++;
@@ -64,16 +64,16 @@ public class BatchProcessor
                 }
                 catch (Exception ex)
                 {
+                    failedJobs++;
                     Log.Logger.Error(ex, "❌ Extraction job '{JobName}' failed", job.Name);
                 }
             }
         }
 
-        // Process comparison jobs
         if (config.ComparisonJobs != null && config.ComparisonJobs.Any())
         {
             Log.Logger.Information("🔍 Processing {Count} comparison jobs", config.ComparisonJobs.Count);
-            
+
             foreach (var job in config.ComparisonJobs)
             {
                 currentJob++;
@@ -88,17 +88,31 @@ public class BatchProcessor
                 }
                 catch (Exception ex)
                 {
+                    failedJobs++;
                     Log.Logger.Error(ex, "❌ Comparison job '{JobName}' failed", job.Name);
                 }
             }
         }
 
         Log.Logger.Information("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        Log.Logger.Information("🎉 Batch processing completed. {Total} jobs processed.", totalJobs);
+        Log.Logger.Information(
+            "🎉 Batch processing completed. Total={TotalJobs}, Failed={FailedJobs}, Success={SuccessJobs}",
+            totalJobs,
+            failedJobs,
+            totalJobs - failedJobs);
         Log.Logger.Information("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+        if (failedJobs > 0)
+        {
+            throw new InvalidOperationException(
+                $"Batch completed with {failedJobs} failed job(s). Check logs above.");
+        }
     }
 
-    private static async Task ProcessExtractionJobAsync(ExtractionJob job, bool testMode, int testObjectLimit)
+    private static async Task ProcessExtractionJobAsync(
+        ExtractionJob job,
+        bool testMode,
+        int testObjectLimit)
     {
         Log.Logger.Information("📦 Extracting from database: {JobName}", job.Name);
         Log.Logger.Information("   Database Type: {DbType}", job.DbType);
@@ -111,40 +125,49 @@ public class BatchProcessor
         }
 
         var unifiedLogger = LoggerHelpers.CreateUnifiedLogger();
+
         var provider = SchemaProviderFactory.Create(
             dbType,
             job.ConnectionString,
             unifiedLogger,
-            verbose: true,
+            verbose: false,
             logLevel: LogLevel.Basic);
+
+        // Optional but useful: validates extraction DB connectivity before extraction.
+        await DatabaseIdentityGuard.ValidateSingleProviderAsync(
+            label: $"EXTRACTION / {job.Name}",
+            provider: provider,
+            progressLogger: unifiedLogger);
 
         var extractor = new DbSchemaExtractor(provider);
 
-        var objectTypes = job.Objects.ToLowerInvariant() == "all"
+        var objectTypes = string.Equals(job.Objects, "all", StringComparison.OrdinalIgnoreCase)
             ? new[] { "functions", "procedures", "views", "triggers", "tables" }
             : job.Objects.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         var objects = await extractor.ExtractAllAsync(
             objectTypes,
-            testMode ? testObjectLimit : (int?)null,
-            msg => Log.Logger.Information(msg)
-        );
+            testMode ? testObjectLimit : null,
+            msg => Log.Logger.Information(msg));
 
         DbSchemaExtractor.WriteToDirectory(
             objects,
             job.OutputDir,
-            msg => Log.Logger.Information(msg)
-        );
+            msg => Log.Logger.Information(msg));
 
         Log.Logger.Information("   ✓ Objects written to {OutputDir}", job.OutputDir);
     }
 
-    private static async Task ProcessComparisonJobAsync(ComparisonJob job, bool testMode, int testObjectLimit)
+    private static async Task ProcessComparisonJobAsync(
+        ComparisonJob job,
+        bool testMode,
+        int testObjectLimit)
     {
         Log.Logger.Information("🔄 Comparing schemas: {JobName}", job.Name);
         Log.Logger.Information("   Source Type: {SourceType}", job.SourceType);
         Log.Logger.Information("   Target Type: {TargetType}", job.TargetType);
         Log.Logger.Information("   Output File: {OutputFile}", job.OutputFile);
+        Log.Logger.Information("   Direction: SOURCE / QA → TARGET / PROD");
 
         if (!Enum.TryParse<DbType>(job.SourceType, true, out var sourceType))
         {
@@ -157,26 +180,35 @@ public class BatchProcessor
         }
 
         var unifiedLogger = LoggerHelpers.CreateUnifiedLogger();
-        var comparer = new SchemaComparer();
 
         var sourceProvider = SchemaProviderFactory.Create(
             sourceType,
             job.SourceConnectionString,
             unifiedLogger,
-            verbose: true,
+            verbose: false,
             logLevel: LogLevel.Basic);
 
         var targetProvider = SchemaProviderFactory.Create(
             targetType,
             job.TargetConnectionString,
             unifiedLogger,
-            verbose: true,
+            verbose: false,
             logLevel: LogLevel.Basic);
+
+        // IMPORTANT:
+        // This is the missing check. It confirms that source and target are not the same DB.
+        // It also catches wrong SSH tunnel configuration before comparison starts.
+        await DatabaseIdentityGuard.ValidateBeforeComparisonAsync(
+            sourceProvider,
+            targetProvider,
+            unifiedLogger);
 
         var comparisonOptions = new ComparisonOptions
         {
             IgnoreOwnership = job.IgnoreOwnership
         };
+
+        var comparer = new SchemaComparer();
 
         var comparisonResults = await comparer.CompareAsync(
             sourceProvider,
@@ -186,15 +218,47 @@ public class BatchProcessor
             testObjectLimit,
             comparisonOptions);
 
+        var resultList = comparisonResults.ToList();
+
+        LogComparisonSummary(job.Name, resultList);
+
+        if (!resultList.Any())
+        {
+            throw new InvalidOperationException(
+                $"Comparison job '{job.Name}' produced zero results. " +
+                "This usually means schema fetching returned empty data or the report generator is filtering everything. " +
+                "Check DB identity logs and provider fetch logs.");
+        }
+
         var report = new SchemaComparisonReport
         {
             Title = job.Title,
             GeneratedOn = DateTime.UtcNow,
-            Results = comparisonResults.ToList()
+            Results = resultList
         };
 
         await HtmlReportGenerator.GenerateWithRazorAsync(report, job.OutputFile);
 
         Log.Logger.Information("   ✓ Report generated: {OutputFile}", job.OutputFile);
+    }
+
+    private static void LogComparisonSummary(
+        string jobName,
+        List<ComparisonResult> results)
+    {
+        var total = results.Count;
+        var matches = results.Count(x => x.Status == ComparisonStatus.Match);
+        var mismatches = results.Count(x => x.Status == ComparisonStatus.Mismatch);
+        var missingInTarget = results.Count(x => x.Status == ComparisonStatus.MissingInTarget);
+        var missingInSource = results.Count(x => x.Status == ComparisonStatus.MissingInSource);
+        var unknown = results.Count(x => x.Status == ComparisonStatus.Unknown);
+
+        Log.Logger.Information("📊 Comparison summary for {JobName}", jobName);
+        Log.Logger.Information("   Total Results     : {Total}", total);
+        Log.Logger.Information("   Match             : {Matches}", matches);
+        Log.Logger.Information("   Mismatch          : {Mismatches}", mismatches);
+        Log.Logger.Information("   Missing in Target : {MissingInTarget}", missingInTarget);
+        Log.Logger.Information("   Missing in Source : {MissingInSource}", missingInSource);
+        Log.Logger.Information("   Unknown           : {Unknown}", unknown);
     }
 }

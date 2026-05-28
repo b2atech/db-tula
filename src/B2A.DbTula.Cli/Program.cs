@@ -53,7 +53,7 @@ internal class Program
                     argsParsed.ExtractType,
                     argsParsed.ExtractConnectionString,
                     unifiedLogger,
-                    verbose: true,
+                    verbose: false,
                     logLevel: LogLevel.Basic);
 
                 var extractor = new DbSchemaExtractor(provider);
@@ -85,14 +85,14 @@ internal class Program
                     argsParsed.SourceType,
                     argsParsed.SourceConnectionString,
                     unifiedLogger,
-                    verbose: true,
+                    verbose: false,
                     logLevel: LogLevel.Basic);
 
                 var targetProvider = SchemaProviderFactory.Create(
                     argsParsed.TargetType,
                     argsParsed.TargetConnectionString,
                     unifiedLogger,
-                    verbose: true,
+                    verbose: false,
                     logLevel: LogLevel.Basic);
 
                 var comparisonOptions = new ComparisonOptions
