@@ -1,8 +1,14 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'mcr.microsoft.com/dotnet/sdk:9.0'
+            args  '-v /root/.nuget:/root/.nuget'  // cache NuGet packages across builds
+        }
+    }
 
     options {
-        buildDiscarder(logRotator(daysToKeepStr: '3', numToKeepStr: '10'))
+        buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '20'))
+        timeout(time: 30, unit: 'MINUTES')
     }
 
     triggers {
@@ -10,7 +16,6 @@ pipeline {
     }
 
     environment {
-
         // QA (54.37.159.71) — existing services
         COMMONDB_QA     = credentials('CONNECTIONSTRINGS__COMMONDB_QA')
         COMMUNITYDB_QA  = credentials('CONNECTIONSTRINGS__COMMUNITYDB_QA')
@@ -39,12 +44,12 @@ pipeline {
         DO_USER       = credentials('DO_USER')
         DO_SSH_KEY_ID = 'DO_SSH_KEY'
 
-        PATH = "$HOME/.dotnet:$PATH"
+        DBTULA = './publish/B2A.DbTula.Cli'
     }
 
     stages {
 
-        stage('Checkout Repo') {
+        stage('Checkout') {
             steps {
                 checkout([
                     $class: 'GitSCM',
@@ -57,186 +62,169 @@ pipeline {
             }
         }
 
-        stage('Setup .NET') {
-            steps {
-                sh '''
-                    wget https://dot.net/v1/dotnet-install.sh
-                    chmod +x dotnet-install.sh
-                    ./dotnet-install.sh --channel 9.0
-                '''
-            }
-        }
-
-        stage('Restore Dependencies') {
+        stage('Build & Publish') {
             steps {
                 sh '''
                     dotnet restore src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj
+
+                    dotnet publish src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj \
+                        --configuration Release \
+                        --runtime linux-x64 \
+                        --self-contained true \
+                        -p:PublishSingleFile=true \
+                        -o ./publish/
+
+                    chmod +x ./publish/B2A.DbTula.Cli
                 '''
             }
         }
 
-        stage('Build CLI Tool') {
+        stage('Unit Tests') {
             steps {
                 sh '''
-                    dotnet build src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release
+                    dotnet test tests/B2A.DbTula.Core.Tests/B2A.DbTula.Core.Tests.csproj \
+                        --configuration Release \
+                        --logger "junit;LogFilePath=../../test-results/unit-tests.xml" \
+                        || true
                 '''
             }
-        }
-
-        stage('QA vs PROD Comparison') {
-            steps {
-                sh '''
-                    mkdir -p gh-pages/qa-vs-prod
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
-                    --source "$COMMONDB_QA" --target "$COMMONDB_PROD" \
-                    --source-label "QA" --target-label "PROD" \
-                    --title "Common Schema Comparison (QA vs PROD)" \
-                    --out "gh-pages/qa-vs-prod/common.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
-                    --source "$COMMUNITYDB_QA" --target "$COMMUNITYDB_PROD" \
-                    --source-label "QA" --target-label "PROD" \
-                    --title "Community Schema Comparison (QA vs PROD)" \
-                    --out "gh-pages/qa-vs-prod/community.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
-                    --source "$INVENTORYDB_QA" --target "$INVENTORYDB_PROD" \
-                    --source-label "QA" --target-label "PROD" \
-                    --title "Inventory Schema Comparison (QA vs PROD)" \
-                    --out "gh-pages/qa-vs-prod/inventory.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
-                    --source "$PAYROLLDB_QA" --target "$PAYROLLDB_PROD" \
-                    --source-label "QA" --target-label "PROD" \
-                    --title "Payroll Schema Comparison (QA vs PROD)" \
-                    --out "gh-pages/qa-vs-prod/payroll.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
-                    --source "$PURCHASEDB_QA" --target "$PURCHASEDB_PROD" \
-                    --source-label "QA" --target-label "PROD" \
-                    --title "Purchase Schema Comparison (QA vs PROD)" \
-                    --out "gh-pages/qa-vs-prod/purchase.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
-                    --source "$SALESDB_QA" --target "$SALESDB_PROD" \
-                    --source-label "QA" --target-label "PROD" \
-                    --title "Sales Schema Comparison (QA vs PROD)" \
-                    --out "gh-pages/qa-vs-prod/sales.html"
-                '''
-
-                // payment, document, agent, einvoice — added via withCredentials so missing
-                // credentials are skipped gracefully until they are created in Jenkins
-                script {
-                    def newServices = [
-                        [id: 'PAYMENT',  title: 'Payment'],
-                        [id: 'DOCUMENT', title: 'Document'],
-                        [id: 'AGENT',    title: 'Agent'],
-                        [id: 'EINVOICE', title: 'EInvoice']
-                    ]
-                    newServices.each { svc ->
-                        def qaCredId   = "CONNECTIONSTRINGS__${svc.id}DB_QA"
-                        def prodCredId = "CONNECTIONSTRINGS__${svc.id}DB_PROD"
-                        try {
-                            withCredentials([
-                                string(credentialsId: qaCredId,   variable: 'SVC_QA'),
-                                string(credentialsId: prodCredId, variable: 'SVC_PROD')
-                            ]) {
-                                sh """
-                                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \\
-                                    --source "\$SVC_QA" --target "\$SVC_PROD" \\
-                                    --source-label "QA" --target-label "PROD" \\
-                                    --title "${svc.title} Schema Comparison (QA vs PROD)" \\
-                                    --out "gh-pages/qa-vs-prod/${svc.id.toLowerCase()}.html"
-                                """
-                            }
-                        } catch (e) {
-                            echo "⚠️  Skipping ${svc.title} QA vs PROD — credentials not yet configured: ${e.message}"
-                        }
-                    }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'test-results/unit-tests.xml'
                 }
             }
         }
 
-        stage('QA vs TEST Comparison') {
-            steps {
-                sh '''
-                    mkdir -p gh-pages/qa-vs-test
+        // Run QA-vs-PROD and QA-vs-TEST comparisons in parallel
+        stage('Schema Comparisons') {
+            parallel {
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
-                    --source "$COMMONDB_QA" --target "$COMMONDB_TEST" \
-                    --source-label "QA" --target-label "TEST" \
-                    --title "Common Schema Comparison (QA vs TEST)" \
-                    --out "gh-pages/qa-vs-test/common.html"
+                stage('QA vs PROD') {
+                    steps {
+                        script {
+                            def driftDetected = false
+                            def services = [
+                                [id: 'COMMON',    label: 'Common'],
+                                [id: 'COMMUNITY', label: 'Community'],
+                                [id: 'INVENTORY', label: 'Inventory'],
+                                [id: 'PAYROLL',   label: 'Payroll'],
+                                [id: 'PURCHASE',  label: 'Purchase'],
+                                [id: 'SALES',     label: 'Sales'],
+                            ]
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
-                    --source "$COMMUNITYDB_QA" --target "$COMMUNITYDB_TEST" \
-                    --source-label "QA" --target-label "TEST" \
-                    --title "Community Schema Comparison (QA vs TEST)" \
-                    --out "gh-pages/qa-vs-test/community.html"
+                            sh 'mkdir -p gh-pages/qa-vs-prod'
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
-                    --source "$INVENTORYDB_QA" --target "$INVENTORYDB_TEST" \
-                    --source-label "QA" --target-label "TEST" \
-                    --title "Inventory Schema Comparison (QA vs TEST)" \
-                    --out "gh-pages/qa-vs-test/inventory.html"
+                            services.each { svc ->
+                                def qaConn   = env["${svc.id}DB_QA"]
+                                def prodConn = env["${svc.id}DB_PROD"]
+                                def outFile  = "gh-pages/qa-vs-prod/${svc.id.toLowerCase()}.html"
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
-                    --source "$PAYROLLDB_QA" --target "$PAYROLLDB_TEST" \
-                    --source-label "QA" --target-label "TEST" \
-                    --title "Payroll Schema Comparison (QA vs TEST)" \
-                    --out "gh-pages/qa-vs-test/payroll.html"
+                                def exitCode = sh(returnStatus: true, script: """
+                                    ${DBTULA} \
+                                        --source  "${qaConn}"   --source-label  QA \
+                                        --target  "${prodConn}" --target-label  PROD \
+                                        --title   "${svc.label} Schema (QA vs PROD)" \
+                                        --out     "${outFile}" \
+                                        --generate-sync \
+                                        --sync-out "gh-pages/qa-vs-prod/${svc.id.toLowerCase()}-sync.sql" \
+                                        --fail-on-drift
+                                """)
 
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
-                    --source "$PURCHASEDB_QA" --target "$PURCHASEDB_TEST" \
-                    --source-label "QA" --target-label "TEST" \
-                    --title "Purchase Schema Comparison (QA vs TEST)" \
-                    --out "gh-pages/qa-vs-test/purchase.html"
-
-                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \
-                    --source "$SALESDB_QA" --target "$SALESDB_TEST" \
-                    --source-label "QA" --target-label "TEST" \
-                    --title "Sales Schema Comparison (QA vs TEST)" \
-                    --out "gh-pages/qa-vs-test/sales.html"
-                '''
-
-                script {
-                    def newServices = [
-                        [id: 'PAYMENT',  title: 'Payment'],
-                        [id: 'DOCUMENT', title: 'Document'],
-                        [id: 'AGENT',    title: 'Agent'],
-                        [id: 'EINVOICE', title: 'EInvoice']
-                    ]
-                    newServices.each { svc ->
-                        def qaCredId   = "CONNECTIONSTRINGS__${svc.id}DB_QA"
-                        def testCredId = "CONNECTIONSTRINGS__${svc.id}DB_TEST"
-                        try {
-                            withCredentials([
-                                string(credentialsId: qaCredId,   variable: 'SVC_QA'),
-                                string(credentialsId: testCredId, variable: 'SVC_TEST')
-                            ]) {
-                                sh """
-                                    dotnet run --project src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj --configuration Release --no-build -- \\
-                                    --source "\$SVC_QA" --target "\$SVC_TEST" \\
-                                    --source-label "QA" --target-label "TEST" \\
-                                    --title "${svc.title} Schema Comparison (QA vs TEST)" \\
-                                    --out "gh-pages/qa-vs-test/${svc.id.toLowerCase()}.html"
-                                """
+                                if (exitCode == 2) {
+                                    echo "🚨 ${svc.label}: objects missing in PROD (exit ${exitCode})"
+                                    driftDetected = true
+                                } else if (exitCode == 1) {
+                                    echo "⚠️  ${svc.label}: schema mismatches detected (exit ${exitCode})"
+                                    driftDetected = true
+                                } else if (exitCode >= 3) {
+                                    error("❌ ${svc.label} QA-vs-PROD comparison failed (exit ${exitCode})")
+                                }
                             }
-                        } catch (e) {
-                            echo "⚠️  Skipping ${svc.title} QA vs TEST — credentials not yet configured: ${e.message}"
+
+                            // Optional new services — skip gracefully if credentials missing
+                            def newServices = [
+                                [id: 'PAYMENT',  label: 'Payment'],
+                                [id: 'DOCUMENT', label: 'Document'],
+                                [id: 'AGENT',    label: 'Agent'],
+                                [id: 'EINVOICE', label: 'EInvoice'],
+                            ]
+                            newServices.each { svc ->
+                                try {
+                                    withCredentials([
+                                        string(credentialsId: "CONNECTIONSTRINGS__${svc.id}DB_QA",   variable: 'SVC_QA'),
+                                        string(credentialsId: "CONNECTIONSTRINGS__${svc.id}DB_PROD", variable: 'SVC_PROD'),
+                                    ]) {
+                                        def exitCode = sh(returnStatus: true, script: """
+                                            ${DBTULA} \
+                                                --source  "\$SVC_QA"   --source-label QA \
+                                                --target  "\$SVC_PROD" --target-label PROD \
+                                                --title   "${svc.label} Schema (QA vs PROD)" \
+                                                --out     "gh-pages/qa-vs-prod/${svc.id.toLowerCase()}.html" \
+                                                --fail-on-drift
+                                        """)
+                                        if (exitCode > 0 && exitCode < 3) driftDetected = true
+                                    }
+                                } catch (e) {
+                                    echo "⏭  Skipping ${svc.label} — credentials not configured: ${e.message}"
+                                }
+                            }
+
+                            if (driftDetected) {
+                                currentBuild.result = 'UNSTABLE'
+                                echo '⚠️  QA vs PROD drift detected — build marked UNSTABLE'
+                            }
                         }
                     }
                 }
+
+                stage('QA vs TEST') {
+                    steps {
+                        script {
+                            def services = [
+                                [id: 'COMMON',    label: 'Common'],
+                                [id: 'COMMUNITY', label: 'Community'],
+                                [id: 'INVENTORY', label: 'Inventory'],
+                                [id: 'PAYROLL',   label: 'Payroll'],
+                                [id: 'PURCHASE',  label: 'Purchase'],
+                                [id: 'SALES',     label: 'Sales'],
+                            ]
+
+                            sh 'mkdir -p gh-pages/qa-vs-test'
+
+                            services.each { svc ->
+                                def qaConn   = env["${svc.id}DB_QA"]
+                                def testConn = env["${svc.id}DB_TEST"]
+
+                                sh """
+                                    ${DBTULA} \
+                                        --source  "${qaConn}"   --source-label  QA \
+                                        --target  "${testConn}" --target-label  TEST \
+                                        --title   "${svc.label} Schema (QA vs TEST)" \
+                                        --out     "gh-pages/qa-vs-test/${svc.id.toLowerCase()}.html" \
+                                        || true
+                                """
+                                // QA-vs-TEST does not fail the build — TEST env can legitimately lag
+                            }
+                        }
+                    }
+                }
+
+            } // end parallel
+        }
+
+        stage('Archive Reports') {
+            steps {
+                archiveArtifacts artifacts: 'gh-pages/**/*.html,gh-pages/**/*.sql',
+                    allowEmptyArchive: true
             }
         }
 
-        stage('Deploy Reports to OVH') {
+        stage('Deploy to OVH') {
             steps {
-                sshagent (credentials: ['DO_SSH_KEY']) {
+                sshagent(credentials: ['DO_SSH_KEY']) {
                     sh '''
                         scp -o StrictHostKeyChecking=no -r gh-pages/* \
-                        ${DO_USER}@${DO_HOST}:/var/www/dbtula-site
+                            ${DO_USER}@${DO_HOST}:/var/www/dbtula-site
                     '''
                 }
             }
@@ -248,13 +236,17 @@ pipeline {
         always {
             cleanWs()
         }
-
-        success {
-            echo "Schema comparison completed successfully!"
+        unstable {
+            echo '⚠️  Schema drift detected in QA vs PROD — review reports on the OVH site'
+            // Uncomment to add Slack notification:
+            // slackSend channel: '#deploys', color: 'warning',
+            //   message: "dbtula: Schema drift detected on ${env.JOB_NAME} — ${env.BUILD_URL}"
         }
-
         failure {
-            echo "Schema comparison failed!"
+            echo '❌ Comparison pipeline failed — check logs for connection or build errors'
+        }
+        success {
+            echo '✅ All schema comparisons completed — no drift detected'
         }
     }
 }

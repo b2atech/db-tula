@@ -31,6 +31,7 @@ public class SchemaSnapshot
     public IReadOnlyList<DbViewDefinition> Views { get; init; } = [];
     public IReadOnlyList<DbTriggerDefinition> Triggers { get; init; } = [];
     public IReadOnlyList<DbSequenceDefinition> Sequences { get; init; } = [];
+    public IReadOnlyList<EnumTypeDefinition> Enums { get; init; } = [];
 
     public HashSet<string> MaterializedViewNames { get; init; }
         = new(StringComparer.OrdinalIgnoreCase);

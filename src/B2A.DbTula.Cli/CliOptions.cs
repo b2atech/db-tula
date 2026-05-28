@@ -14,6 +14,13 @@ public class CliOptions
     public string SourceLabel { get; set; } = "Source";
     public string TargetLabel { get; set; } = "Target";
     public bool IgnoreOwnership { get; set; } = true;
+    public bool FailOnDrift { get; set; } = false;
+
+    // Sync script options
+    public bool GenerateSync    { get; set; } = false;
+    public bool AllowRisky      { get; set; } = false;
+    public bool AllowDestructive { get; set; } = false;
+    public string SyncOutputFile { get; set; } = "schema-sync.sql";
 
     // Extraction options
     public bool ExtractMode { get; set; } = false;
@@ -90,6 +97,22 @@ public class CliOptions
                     break;
                 case "--no-ignore-ownership":
                     options.IgnoreOwnership = false;
+                    break;
+                case "--fail-on-drift":
+                    options.FailOnDrift = true;
+                    break;
+                case "--generate-sync":
+                case "--sync":
+                    options.GenerateSync = true;
+                    break;
+                case "--allow-risky":
+                    options.AllowRisky = true;
+                    break;
+                case "--allow-destructive":
+                    options.AllowDestructive = true;
+                    break;
+                case "--sync-out":
+                    if (i + 1 < args.Length) options.SyncOutputFile = args[++i];
                     break;
 
                 // --- Extraction options ---

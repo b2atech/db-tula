@@ -11,6 +11,8 @@ public enum SchemaObjectType
     Function,
     Procedure,
     View,
-    Trigger
+    Trigger,
+    Enum,
+    CheckConstraint
 }
 

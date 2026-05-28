@@ -181,6 +181,10 @@ public class SchemaComparer : ISchemaComparer
         progressLogger?.Invoke(0, 0, "🔢 Comparing sequences...", false);
         CompareSequences(sourceSnapshot?.Sequences, targetSnapshot?.Sequences, results);
 
+        // ── ENUMS ─────────────────────────────────────────────────────────────
+        progressLogger?.Invoke(0, 0, "🔠 Comparing enum types...", false);
+        CompareEnums(sourceSnapshot?.Enums, targetSnapshot?.Enums, results);
+
         progressLogger?.Invoke(0, 0, $"✅ Schema comparison completed in {sw.ElapsedMilliseconds}ms.", false);
         return results;
     }
@@ -600,6 +604,76 @@ public class SchemaComparer : ISchemaComparer
             else
             {
                 results.Add(CreateSequenceResult(name, ComparisonStatus.Match, string.Empty));
+            }
+        }
+    }
+
+    private static void CompareEnums(
+        IReadOnlyList<EnumTypeDefinition>? sourceEnums,
+        IReadOnlyList<EnumTypeDefinition>? targetEnums,
+        List<ComparisonResult> results)
+    {
+        if (sourceEnums == null || targetEnums == null) return;
+
+        var srcByName = sourceEnums.ToDictionary(e => e.Name, StringComparer.OrdinalIgnoreCase);
+        var tgtByName = targetEnums.ToDictionary(e => e.Name, StringComparer.OrdinalIgnoreCase);
+        var allNames  = srcByName.Keys.Union(tgtByName.Keys, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in allNames)
+        {
+            var inSrc = srcByName.TryGetValue(name, out var src);
+            var inTgt = tgtByName.TryGetValue(name, out var tgt);
+
+            if (inSrc && !inTgt)
+            {
+                var createScript = $"CREATE TYPE \"{name}\" AS ENUM ({string.Join(", ", src!.Values.Select(v => $"'{v}'"))});";
+                results.Add(new ComparisonResult
+                {
+                    ObjectType = SchemaObjectType.Enum, Name = name,
+                    Status = ComparisonStatus.MissingInTarget,
+                    Details = $"Enum '{name}' missing in target. Values: {string.Join(", ", src.Values)}",
+                    DiffScript = createScript,
+                });
+            }
+            else if (!inSrc && inTgt)
+            {
+                results.Add(new ComparisonResult
+                {
+                    ObjectType = SchemaObjectType.Enum, Name = name,
+                    Status = ComparisonStatus.MissingInSource,
+                    Details = $"Enum '{name}' missing in source.",
+                });
+            }
+            else if (inSrc && inTgt && !src!.StructuralEquals(tgt!))
+            {
+                var srcValues = string.Join(", ", src.Values);
+                var tgtValues = string.Join(", ", tgt!.Values);
+
+                // Added values (safe: ALTER TYPE ... ADD VALUE)
+                var added   = src.Values.Except(tgt.Values, StringComparer.Ordinal).ToList();
+                // Removed values (destructive: requires recreating the type)
+                var removed = tgt.Values.Except(src.Values, StringComparer.Ordinal).ToList();
+
+                var addScripts  = added.Select(v => $"ALTER TYPE \"{name}\" ADD VALUE IF NOT EXISTS '{v}';");
+                var diffScript  = removed.Any()
+                    ? $"-- ⚠ Values removed from enum (requires DROP/RECREATE): {string.Join(", ", removed)}\n-- Added values:\n{string.Join("\n", addScripts)}"
+                    : string.Join("\n", addScripts);
+
+                results.Add(new ComparisonResult
+                {
+                    ObjectType = SchemaObjectType.Enum, Name = name,
+                    Status = ComparisonStatus.Mismatch,
+                    Details = $"Enum values differ — source: [{srcValues}] | target: [{tgtValues}]",
+                    DiffScript = diffScript,
+                });
+            }
+            else
+            {
+                results.Add(new ComparisonResult
+                {
+                    ObjectType = SchemaObjectType.Enum, Name = name,
+                    Status = ComparisonStatus.Match,
+                });
             }
         }
     }

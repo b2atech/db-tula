@@ -33,11 +33,12 @@ public class BulkSchemaFetcher
         var triggersTask     = FetchAllTriggersAsync();
         var sequencesTask    = FetchAllSequencesAsync();
         var matviewsTask     = FetchMaterializedViewNamesAsync();
+        var enumsTask        = FetchAllEnumsAsync();
 
         await Task.WhenAll(
             tablesTask, columnsTask, pksTask, fksTask, indexesTask,
             uniqueConsTask, checkConsTask, functionsTask, proceduresTask,
-            viewsTask, triggersTask, sequencesTask, matviewsTask);
+            viewsTask, triggersTask, sequencesTask, matviewsTask, enumsTask);
 
         return new SchemaSnapshot
         {
@@ -54,6 +55,7 @@ public class BulkSchemaFetcher
             Triggers                  = triggersTask.Result,
             Sequences                 = sequencesTask.Result,
             MaterializedViewNames     = matviewsTask.Result,
+            Enums                     = enumsTask.Result,
             CapturedAt                = DateTimeOffset.UtcNow,
         };
     }
@@ -456,6 +458,35 @@ public class BulkSchemaFetcher
                 MaxValue    = Convert.ToInt64(r["max_value"]),
                 CacheSize   = Convert.ToInt64(r["cache_size"]),
                 Cycle       = r["cycle"] != DBNull.Value && (bool)r["cycle"],
+            }).ToList();
+    }
+
+    // ── Enum Types ────────────────────────────────────────────────────────────
+
+    private async Task<IReadOnlyList<EnumTypeDefinition>> FetchAllEnumsAsync()
+    {
+        const string sql = @"
+            SELECT
+                t.typname AS enum_name,
+                e.enumlabel AS enum_value,
+                e.enumsortorder AS sort_order
+            FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            JOIN pg_enum e ON e.enumtypid = t.oid
+            WHERE t.typtype = 'e'
+              AND n.nspname = 'public'
+            ORDER BY t.typname, e.enumsortorder;";
+
+        var dt = await _connection.ExecuteQueryAsync(sql);
+
+        return dt.AsEnumerable()
+            .GroupBy(r => r["enum_name"].ToString() ?? string.Empty)
+            .Select(g => new EnumTypeDefinition
+            {
+                Name   = g.Key,
+                Values = g.OrderBy(r => Convert.ToDouble(r["sort_order"]))
+                          .Select(r => r["enum_value"].ToString() ?? string.Empty)
+                          .ToList()
             }).ToList();
     }
 

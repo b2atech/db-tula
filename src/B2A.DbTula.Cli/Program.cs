@@ -6,14 +6,18 @@ using B2A.DbTula.Cli.Services;
 using B2A.DbTula.Core.Enums;
 using B2A.DbTula.Core.Models;
 using Serilog;
-using System;
-using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 
+/// <summary>
+/// Exit codes:
+///   0 = all objects match
+///   1 = mismatches or missing objects detected (drift)
+///   2 = objects missing in target (destructive drift — objects exist in source but not target)
+///   3 = comparison failed (connection error, query error)
+/// </summary>
 internal class Program
 {
-    private static async Task Main(string[] args)
+    private static async Task<int> Main(string[] args)
     {
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
@@ -27,121 +31,141 @@ internal class Program
             if (!argsParsed.IsValid)
             {
                 Console.WriteLine(argsParsed.GetUsage());
-                return;
+                return 3;
             }
 
             var unifiedLogger = LoggerHelpers.CreateUnifiedLogger();
 
             if (argsParsed.IsBatchMode)
             {
-                // Batch mode - process multiple databases
                 Log.Logger.Information("Starting batch mode from configuration file: {ConfigFile}", argsParsed.BatchConfigFile);
-
                 var batchConfig = await BatchProcessor.LoadBatchConfigurationAsync(argsParsed.BatchConfigFile);
                 if (batchConfig == null)
                 {
                     Log.Logger.Fatal("Failed to load batch configuration file");
-                    return;
+                    return 3;
                 }
-
                 await BatchProcessor.ProcessBatchAsync(batchConfig, argsParsed.TestMode, argsParsed.TestObjectLimit);
+                return 0;
             }
-            else if (argsParsed.IsExtract)
+
+            if (argsParsed.IsExtract)
             {
-                // Extraction mode
                 var provider = SchemaProviderFactory.Create(
-                    argsParsed.ExtractType,
-                    argsParsed.ExtractConnectionString,
-                    unifiedLogger,
-                    verbose: true,
-                    logLevel: LogLevel.Basic);
+                    argsParsed.ExtractType, argsParsed.ExtractConnectionString,
+                    unifiedLogger, verbose: true, logLevel: LogLevel.Basic);
 
                 var extractor = new DbSchemaExtractor(provider);
-
-                var types = argsParsed.ExtractObjectTypes;
-
-                // Use logging in extraction
                 var objects = await extractor.ExtractAllAsync(
-                    types,
+                    argsParsed.ExtractObjectTypes,
                     argsParsed.TestMode ? argsParsed.TestObjectLimit : (int?)null,
-                    msg => Log.Logger.Information(msg)
-                );
+                    msg => Log.Logger.Information(msg));
 
-                // Write extracted objects to separate directories per type/object name/hash, with progress logging
-                DbSchemaExtractor.WriteToDirectory(
-                    objects,
-                    argsParsed.OutputDir,
-                    msg => Log.Logger.Information(msg)
-                );
+                DbSchemaExtractor.WriteToDirectory(objects, argsParsed.OutputDir,
+                    msg => Log.Logger.Information(msg));
 
                 Log.Logger.Information("✅ Extraction completed. Objects written to {OutputDir}.", argsParsed.OutputDir);
+                return 0;
             }
-            else
+
+            // ── Comparison mode ───────────────────────────────────────────────
+            var comparer = new SchemaComparer();
+
+            var sourceProvider = SchemaProviderFactory.Create(
+                argsParsed.SourceType, argsParsed.SourceConnectionString,
+                unifiedLogger, verbose: true, logLevel: LogLevel.Basic);
+
+            var targetProvider = SchemaProviderFactory.Create(
+                argsParsed.TargetType, argsParsed.TargetConnectionString,
+                unifiedLogger, verbose: true, logLevel: LogLevel.Basic);
+
+            var comparisonOptions = new ComparisonOptions
             {
-                // Comparison mode (backward compatible)
-                var comparer = new SchemaComparer();
+                IgnoreOwnership = argsParsed.IgnoreOwnership,
+                SourceLabel     = argsParsed.SourceLabel,
+                TargetLabel     = argsParsed.TargetLabel
+            };
 
-                var sourceProvider = SchemaProviderFactory.Create(
-                    argsParsed.SourceType,
-                    argsParsed.SourceConnectionString,
-                    unifiedLogger,
-                    verbose: true,
-                    logLevel: LogLevel.Basic);
+            Log.Logger.Information("📊 Source ({SourceLabel}): {Source}", argsParsed.SourceLabel, argsParsed.SourceConnectionString);
+            Log.Logger.Information("📊 Target ({TargetLabel}): {Target}", argsParsed.TargetLabel, argsParsed.TargetConnectionString);
 
-                var targetProvider = SchemaProviderFactory.Create(
-                    argsParsed.TargetType,
-                    argsParsed.TargetConnectionString,
-                    unifiedLogger,
-                    verbose: true,
-                    logLevel: LogLevel.Basic);
+            var comparisonResults = await comparer.CompareAsync(
+                sourceProvider, targetProvider,
+                unifiedLogger, argsParsed.TestMode, argsParsed.TestObjectLimit,
+                comparisonOptions);
 
-                var comparisonOptions = new ComparisonOptions
+            var resultList = comparisonResults.ToList();
+
+            int matchCount         = resultList.Count(r => r.Status == ComparisonStatus.Match);
+            int mismatchCount      = resultList.Count(r => r.Status == ComparisonStatus.Mismatch);
+            int missingInTargetCount = resultList.Count(r => r.Status == ComparisonStatus.MissingInTarget);
+            int missingInSourceCount = resultList.Count(r => r.Status == ComparisonStatus.MissingInSource);
+
+            Log.Logger.Information("📋 Compared {Total} schema objects", resultList.Count);
+            Log.Logger.Information("  ✅ Match:                   {Match}",         matchCount);
+            Log.Logger.Information("  ⚠️  Mismatch:                {Mismatch}",      mismatchCount);
+            Log.Logger.Information("  ❌ Missing in {TargetLabel}: {MissingTarget}", argsParsed.TargetLabel, missingInTargetCount);
+            Log.Logger.Information("  ❌ Missing in {SourceLabel}: {MissingSource}", argsParsed.SourceLabel, missingInSourceCount);
+
+            var byType = resultList
+                .GroupBy(r => r.ObjectType)
+                .Select(g => $"{g.Key}={g.Count()}(diff={g.Count(x => x.Status != ComparisonStatus.Match)})");
+            Log.Logger.Information("  By type: {Types}", string.Join(", ", byType));
+
+            var report = new SchemaComparisonReport
+            {
+                Title       = argsParsed.Title,
+                SourceLabel = argsParsed.SourceLabel,
+                TargetLabel = argsParsed.TargetLabel,
+                GeneratedOn = DateTime.UtcNow,
+                Results     = resultList
+            };
+            await HtmlReportGenerator.GenerateWithRazorAsync(report, argsParsed.OutputFile);
+            Log.Logger.Information("✅ Report written to: {OutputFile}", argsParsed.OutputFile);
+
+            if (argsParsed.GenerateSync)
+            {
+                var syncOptions = new SyncScriptOptions
                 {
-                    IgnoreOwnership = argsParsed.IgnoreOwnership,
-                    SourceLabel = argsParsed.SourceLabel,
-                    TargetLabel = argsParsed.TargetLabel
+                    SourceLabel       = argsParsed.SourceLabel,
+                    TargetLabel       = argsParsed.TargetLabel,
+                    IncludeRiskyChanges = argsParsed.AllowRisky,
+                    AllowDestructive  = argsParsed.AllowDestructive,
                 };
-
-                Log.Logger.Information("📊 Source ({SourceLabel}): {Source}", argsParsed.SourceLabel, argsParsed.SourceConnectionString);
-                Log.Logger.Information("📊 Target ({TargetLabel}): {Target}", argsParsed.TargetLabel, argsParsed.TargetConnectionString);
-
-                var comparisonResults = await comparer.CompareAsync(
-                    sourceProvider,
-                    targetProvider,
-                    unifiedLogger,
-                    argsParsed.TestMode,
-                    argsParsed.TestObjectLimit,
-                    comparisonOptions);
-
-                var resultList = comparisonResults.ToList();
-
-                Log.Logger.Information("📋 Fetched {Total} schema objects", resultList.Count);
-                Log.Logger.Information("  ✅ Match:           {Match}", resultList.Count(r => r.Status == B2A.DbTula.Core.Enums.ComparisonStatus.Match));
-                Log.Logger.Information("  ⚠️  Mismatch:        {Mismatch}", resultList.Count(r => r.Status == B2A.DbTula.Core.Enums.ComparisonStatus.Mismatch));
-                Log.Logger.Information("  ❌ Missing in {TargetLabel}: {MissingTarget}", argsParsed.TargetLabel, resultList.Count(r => r.Status == B2A.DbTula.Core.Enums.ComparisonStatus.MissingInTarget));
-                Log.Logger.Information("  ❌ Missing in {SourceLabel}: {MissingSource}", argsParsed.SourceLabel, resultList.Count(r => r.Status == B2A.DbTula.Core.Enums.ComparisonStatus.MissingInSource));
-
-                var byType = resultList
-                    .GroupBy(r => r.ObjectType)
-                    .Select(g => $"{g.Key}={g.Count()}(diff={g.Count(x => x.Status != B2A.DbTula.Core.Enums.ComparisonStatus.Match)})");
-                Log.Logger.Information("  By type: {Types}", string.Join(", ", byType));
-
-                var report = new SchemaComparisonReport
-                {
-                    Title = argsParsed.Title,
-                    SourceLabel = argsParsed.SourceLabel,
-                    TargetLabel = argsParsed.TargetLabel,
-                    GeneratedOn = DateTime.UtcNow,
-                    Results = resultList
-                };
-                await HtmlReportGenerator.GenerateWithRazorAsync(report, argsParsed.OutputFile);
-
-                Log.Logger.Information("✅ Report written to: {OutputFile}", argsParsed.OutputFile);
+                var syncScript = new SyncScriptGenerator().Generate(resultList, syncOptions);
+                var syncText   = new SyncScriptGenerator().Render(syncScript, syncOptions);
+                await File.WriteAllTextAsync(argsParsed.SyncOutputFile, syncText);
+                Log.Logger.Information("✅ Sync script written to: {SyncFile} ({Safe} safe, {Risky} risky, {Destructive} destructive statements)",
+                    argsParsed.SyncOutputFile, syncScript.Safe.Count, syncScript.Risky.Count, syncScript.Destructive.Count);
             }
+
+            // ── Exit code ─────────────────────────────────────────────────────
+            if (!argsParsed.FailOnDrift)
+                return 0;
+
+            bool hasMissingInTarget = missingInTargetCount > 0;
+            bool hasDrift           = mismatchCount > 0 || missingInSourceCount > 0 || hasMissingInTarget;
+
+            if (!hasDrift)
+                return 0;
+
+            // Exit 2 = objects missing in target (more severe — prod is behind)
+            if (hasMissingInTarget)
+            {
+                Log.Logger.Warning("🚨 DRIFT DETECTED — {Count} object(s) missing in {Target}. Exiting with code 2.",
+                    missingInTargetCount, argsParsed.TargetLabel);
+                return 2;
+            }
+
+            // Exit 1 = mismatches / objects missing only in source
+            Log.Logger.Warning("⚠️  DRIFT DETECTED — {Mismatch} mismatch(es), {MissingSource} missing in source. Exiting with code 1.",
+                mismatchCount, missingInSourceCount);
+            return 1;
         }
         catch (Exception ex)
         {
             Log.Logger.Fatal(ex, "❌ Error during operation");
+            return 3;
         }
         finally
         {
