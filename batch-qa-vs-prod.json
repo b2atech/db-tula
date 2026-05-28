@@ -1,0 +1,115 @@
+{
+  "title": "Dhanman Schema — QA vs PROD",
+  "comparisons": [
+    {
+      "name": "Common",
+      "source": "${COMMONDB_QA}",
+      "target": "${COMMONDB_PROD}",
+      "sourceLabel": "QA",
+      "targetLabel": "PROD",
+      "outputFile": "gh-pages/qa-vs-prod/common.html",
+      "generateSync": true,
+      "syncOutputFile": "gh-pages/qa-vs-prod/common-sync.sql",
+      "optional": false
+    },
+    {
+      "name": "Community",
+      "source": "${COMMUNITYDB_QA}",
+      "target": "${COMMUNITYDB_PROD}",
+      "sourceLabel": "QA",
+      "targetLabel": "PROD",
+      "outputFile": "gh-pages/qa-vs-prod/community.html",
+      "generateSync": true,
+      "syncOutputFile": "gh-pages/qa-vs-prod/community-sync.sql",
+      "optional": false
+    },
+    {
+      "name": "Inventory",
+      "source": "${INVENTORYDB_QA}",
+      "target": "${INVENTORYDB_PROD}",
+      "sourceLabel": "QA",
+      "targetLabel": "PROD",
+      "outputFile": "gh-pages/qa-vs-prod/inventory.html",
+      "generateSync": true,
+      "syncOutputFile": "gh-pages/qa-vs-prod/inventory-sync.sql",
+      "optional": false
+    },
+    {
+      "name": "Payroll",
+      "source": "${PAYROLLDB_QA}",
+      "target": "${PAYROLLDB_PROD}",
+      "sourceLabel": "QA",
+      "targetLabel": "PROD",
+      "outputFile": "gh-pages/qa-vs-prod/payroll.html",
+      "generateSync": true,
+      "syncOutputFile": "gh-pages/qa-vs-prod/payroll-sync.sql",
+      "optional": false
+    },
+    {
+      "name": "Purchase",
+      "source": "${PURCHASEDB_QA}",
+      "target": "${PURCHASEDB_PROD}",
+      "sourceLabel": "QA",
+      "targetLabel": "PROD",
+      "outputFile": "gh-pages/qa-vs-prod/purchase.html",
+      "generateSync": true,
+      "syncOutputFile": "gh-pages/qa-vs-prod/purchase-sync.sql",
+      "optional": false
+    },
+    {
+      "name": "Sales",
+      "source": "${SALESDB_QA}",
+      "target": "${SALESDB_PROD}",
+      "sourceLabel": "QA",
+      "targetLabel": "PROD",
+      "outputFile": "gh-pages/qa-vs-prod/sales.html",
+      "generateSync": true,
+      "syncOutputFile": "gh-pages/qa-vs-prod/sales-sync.sql",
+      "optional": false
+    },
+    {
+      "name": "Payment",
+      "source": "${PAYMENTDB_QA}",
+      "target": "${PAYMENTDB_PROD}",
+      "sourceLabel": "QA",
+      "targetLabel": "PROD",
+      "outputFile": "gh-pages/qa-vs-prod/payment.html",
+      "generateSync": true,
+      "syncOutputFile": "gh-pages/qa-vs-prod/payment-sync.sql",
+      "optional": true
+    },
+    {
+      "name": "Document",
+      "source": "${DOCUMENTDB_QA}",
+      "target": "${DOCUMENTDB_PROD}",
+      "sourceLabel": "QA",
+      "targetLabel": "PROD",
+      "outputFile": "gh-pages/qa-vs-prod/document.html",
+      "generateSync": true,
+      "syncOutputFile": "gh-pages/qa-vs-prod/document-sync.sql",
+      "optional": true
+    },
+    {
+      "name": "Agent",
+      "source": "${AGENTDB_QA}",
+      "target": "${AGENTDB_PROD}",
+      "sourceLabel": "QA",
+      "targetLabel": "PROD",
+      "outputFile": "gh-pages/qa-vs-prod/agent.html",
+      "generateSync": true,
+      "syncOutputFile": "gh-pages/qa-vs-prod/agent-sync.sql",
+      "optional": true
+    },
+    {
+      "name": "EInvoice",
+      "source": "${EINVOICEDB_QA}",
+      "target": "${EINVOICEDB_PROD}",
+      "sourceLabel": "QA",
+      "targetLabel": "PROD",
+      "outputFile": "gh-pages/qa-vs-prod/einvoice.html",
+      "generateSync": true,
+      "syncOutputFile": "gh-pages/qa-vs-prod/einvoice-sync.sql",
+      "optional": true
+    }
+  ]
+}

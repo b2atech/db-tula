@@ -87,6 +87,8 @@ public class SchemaComparer : ISchemaComparer
         }
 
         var results = new List<ComparisonResult>();
+        var phaseTimes = new List<(string Phase, long Ms)>();
+        long phaseStart;
 
         // ── TABLES ────────────────────────────────────────────────────────────
         var sourceTables = sourceSnapshot?.TableNames.ToList()
@@ -100,12 +102,15 @@ public class SchemaComparer : ISchemaComparer
             : targetTables;
 
         progressLogger?.Invoke(0, 0, $"📄 Comparing {limitedSourceTables.Count} tables...", false);
+        phaseStart = sw.ElapsedMilliseconds;
 
         await CompareTablesAsync(
             sourceProvider, targetProvider,
             limitedSourceTables, limitedTargetTables,
             results, progressLogger, options,
             sourceSnapshot, targetSnapshot);
+
+        phaseTimes.Add(("Tables", sw.ElapsedMilliseconds - phaseStart));
 
         // ── FUNCTIONS ─────────────────────────────────────────────────────────
         // NormalizeFunctionKey: pg_get_function_identity_arguments uses the current search_path
@@ -148,7 +153,9 @@ public class SchemaComparer : ISchemaComparer
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
         progressLogger?.Invoke(0, 0, $"⚙️ Comparing {limitedSrcFunctions.Count} functions...", false);
+        phaseStart = sw.ElapsedMilliseconds;
         await CompareFunctionsAsync(sourceProvider, targetProvider, limitedSrcFunctions, limitedTgtFunctions, results, progressLogger, options);
+        phaseTimes.Add(("Functions", sw.ElapsedMilliseconds - phaseStart));
 
         // ── PROCEDURES ────────────────────────────────────────────────────────
         IEnumerable<DbFunctionDefinition> srcProcList = sourceSnapshot != null
@@ -174,7 +181,9 @@ public class SchemaComparer : ISchemaComparer
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
         progressLogger?.Invoke(0, 0, $"🛠 Comparing {limitedSrcProcedures.Count} procedures...", false);
+        phaseStart = sw.ElapsedMilliseconds;
         await CompareProceduresAsync(sourceProvider, targetProvider, limitedSrcProcedures, limitedTgtProcedures, results, progressLogger, options);
+        phaseTimes.Add(("Procedures", sw.ElapsedMilliseconds - phaseStart));
 
         // ── VIEWS ─────────────────────────────────────────────────────────────
         IEnumerable<DbViewDefinition> srcViewList = sourceSnapshot != null
@@ -193,7 +202,9 @@ public class SchemaComparer : ISchemaComparer
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
         progressLogger?.Invoke(0, 0, $"🔍 Comparing {limitedSrcViews.Count} views...", false);
+        phaseStart = sw.ElapsedMilliseconds;
         await CompareViewsAsync(sourceProvider, targetProvider, limitedSrcViews, limitedTgtViews, results, progressLogger, options);
+        phaseTimes.Add(("Views", sw.ElapsedMilliseconds - phaseStart));
 
         // ── TRIGGERS ──────────────────────────────────────────────────────────
         Func<DbTriggerDefinition, string> triggerKey = t => $"{t.Table}|{t.Name}";
@@ -213,15 +224,38 @@ public class SchemaComparer : ISchemaComparer
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
         progressLogger?.Invoke(0, 0, $"⏰ Comparing {limitedSrcTriggers.Count} triggers...", false);
+        phaseStart = sw.ElapsedMilliseconds;
         await CompareTriggersAsync(sourceProvider, targetProvider, limitedSrcTriggers, limitedTgtTriggers, results, progressLogger, options);
+        phaseTimes.Add(("Triggers", sw.ElapsedMilliseconds - phaseStart));
 
         // ── SEQUENCES ─────────────────────────────────────────────────────────
         progressLogger?.Invoke(0, 0, "🔢 Comparing sequences...", false);
+        phaseStart = sw.ElapsedMilliseconds;
         CompareSequences(sourceSnapshot?.Sequences, targetSnapshot?.Sequences, results);
+        phaseTimes.Add(("Sequences", sw.ElapsedMilliseconds - phaseStart));
 
         // ── ENUMS ─────────────────────────────────────────────────────────────
         progressLogger?.Invoke(0, 0, "🔠 Comparing enum types...", false);
+        phaseStart = sw.ElapsedMilliseconds;
         CompareEnums(sourceSnapshot?.Enums, targetSnapshot?.Enums, results);
+        phaseTimes.Add(("Enums", sw.ElapsedMilliseconds - phaseStart));
+
+        // ── TIMING SUMMARY ────────────────────────────────────────────────────
+        if (progressLogger != null)
+        {
+            var totalMs = sw.ElapsedMilliseconds;
+            var sb = new StringBuilder();
+            sb.AppendLine("┌──────────────┬──────────┐");
+            sb.AppendLine("│ Phase        │     Time │");
+            sb.AppendLine("├──────────────┼──────────┤");
+            foreach (var (phase, ms) in phaseTimes)
+                sb.AppendLine($"│ {phase,-12} │ {ms,5}ms │");
+            sb.AppendLine("├──────────────┼──────────┤");
+            sb.Append(    $"│ {"TOTAL",-12} │ {totalMs,5}ms │");
+            sb.AppendLine();
+            sb.Append(    "└──────────────┴──────────┘");
+            progressLogger.Invoke(0, 0, sb.ToString(), false);
+        }
 
         progressLogger?.Invoke(0, 0, $"✅ Schema comparison completed in {sw.ElapsedMilliseconds}ms.", false);
         return results;
@@ -813,7 +847,8 @@ public class SchemaComparer : ISchemaComparer
     }
 
     // --- FUNCTIONS ---
-    private async Task CompareFunctionsAsync(
+    // Uses Definition already in the snapshot — no per-function DB round-trips.
+    private Task CompareFunctionsAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         Dictionary<string, DbFunctionDefinition> sourceFunctions,
@@ -824,26 +859,23 @@ public class SchemaComparer : ISchemaComparer
     {
         var sourceDbKind = GetDbKind(sourceProvider);
         var targetDbKind = GetDbKind(targetProvider);
-        
         int total = sourceFunctions.Count;
         int index = 0;
 
         foreach (var kvp in sourceFunctions)
         {
             index++;
-            var signature = kvp.Key;
             var source = kvp.Value;
-
             progressLogger?.Invoke(index, total, $"⚙️ Comparing function: {source.Name}", true);
 
-            if (!targetFunctionMap.TryGetValue(signature, out var target))
+            if (!targetFunctionMap.TryGetValue(kvp.Key, out var target))
             {
                 results.Add(CreateResult(source.Name, SchemaObjectType.Function, ComparisonStatus.MissingInTarget, source.Definition));
                 continue;
             }
 
-            var sourceDef = await sourceProvider.GetFunctionDefinitionAsync(source.Name, source.Arguments);
-            var targetDef = await targetProvider.GetFunctionDefinitionAsync(target.Name, target.Arguments);
+            var sourceDef = source.Definition;
+            var targetDef = target.Definition;
 
             if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
@@ -864,18 +896,14 @@ public class SchemaComparer : ISchemaComparer
             }
         }
 
-        foreach (var kvp in targetFunctionMap)
-        {
-            if (!sourceFunctions.ContainsKey(kvp.Key))
-            {
-                var target = kvp.Value;
-                results.Add(CreateResult(target.Name, SchemaObjectType.Function, ComparisonStatus.MissingInSource, target.Definition));
-            }
-        }
+        foreach (var kvp in targetFunctionMap.Where(kvp => !sourceFunctions.ContainsKey(kvp.Key)))
+            results.Add(CreateResult(kvp.Value.Name, SchemaObjectType.Function, ComparisonStatus.MissingInSource, kvp.Value.Definition));
+
+        return Task.CompletedTask;
     }
 
     // --- PROCEDURES ---
-    private async Task CompareProceduresAsync(
+    private Task CompareProceduresAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         Dictionary<string, DbFunctionDefinition> sourceProcedureMap,
@@ -886,24 +914,22 @@ public class SchemaComparer : ISchemaComparer
     {
         var sourceDbKind = GetDbKind(sourceProvider);
         var targetDbKind = GetDbKind(targetProvider);
-        
         int total = sourceProcedureMap.Count;
         int index = 0;
 
         foreach (var kvp in sourceProcedureMap)
         {
-            var signatureKey = kvp.Key;
             var source = kvp.Value;
             progressLogger?.Invoke(++index, total, $"🛠 Comparing procedure: {source.Name}", true);
 
-            if (!targetProcedureMap.TryGetValue(signatureKey, out var target))
+            if (!targetProcedureMap.TryGetValue(kvp.Key, out var target))
             {
                 results.Add(CreateResult(source.Name, SchemaObjectType.Procedure, ComparisonStatus.MissingInTarget, source.Definition));
                 continue;
             }
 
-            var sourceDef = await sourceProvider.GetProcedureDefinitionAsync(source.Name, source.Arguments);
-            var targetDef = await targetProvider.GetProcedureDefinitionAsync(target.Name, target.Arguments);
+            var sourceDef = source.Definition;
+            var targetDef = target.Definition;
 
             if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
@@ -924,18 +950,14 @@ public class SchemaComparer : ISchemaComparer
             }
         }
 
-        foreach (var kvp in targetProcedureMap)
-        {
-            if (!sourceProcedureMap.ContainsKey(kvp.Key))
-            {
-                var target = kvp.Value;
-                results.Add(CreateResult(target.Name, SchemaObjectType.Procedure, ComparisonStatus.MissingInSource, target.Definition));
-            }
-        }
+        foreach (var kvp in targetProcedureMap.Where(kvp => !sourceProcedureMap.ContainsKey(kvp.Key)))
+            results.Add(CreateResult(kvp.Value.Name, SchemaObjectType.Procedure, ComparisonStatus.MissingInSource, kvp.Value.Definition));
+
+        return Task.CompletedTask;
     }
 
-    // --- VIEWS ---
-    private async Task CompareViewsAsync(
+    // --- VIEWS --- uses snapshot Definition — no DB calls
+    private Task CompareViewsAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         Dictionary<string, DbViewDefinition> sourceViewMap,
@@ -946,56 +968,45 @@ public class SchemaComparer : ISchemaComparer
     {
         var sourceDbKind = GetDbKind(sourceProvider);
         var targetDbKind = GetDbKind(targetProvider);
-        
         int total = sourceViewMap.Count;
         int index = 0;
 
         foreach (var kvp in sourceViewMap)
         {
-            var viewKey = kvp.Key;
             var source = kvp.Value;
             progressLogger?.Invoke(++index, total, $"🔍 Comparing view: {source.Name}", true);
 
-            if (!targetViewMap.TryGetValue(viewKey, out var target))
+            if (!targetViewMap.TryGetValue(kvp.Key, out var target))
             {
                 results.Add(CreateResult(source.Name, SchemaObjectType.View, ComparisonStatus.MissingInTarget, source.Definition));
                 continue;
             }
 
-            var sourceDef = await sourceProvider.GetViewDefinitionAsync(source.Name);
-            var targetDef = await targetProvider.GetViewDefinitionAsync(target.Name);
+            var sourceDef = source.Definition;
+            var targetDef = target.Definition;
 
             if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
                 var result = new ComparisonResult
                 {
-                    ObjectType = SchemaObjectType.View,
-                    Name = source.Name,
-                    Status = ComparisonStatus.Mismatch,
-                    Details = "View definition differs",
+                    ObjectType = SchemaObjectType.View, Name = source.Name,
+                    Status = ComparisonStatus.Mismatch, Details = "View definition differs",
                     DiffScript = $"-- SOURCE\n{sourceDef}\n\n-- TARGET\n{targetDef}"
                 };
                 EnhanceComparisonResultWithDiff(result, sourceDef, targetDef, _currentOptions.SourceLabel, _currentOptions.TargetLabel);
                 results.Add(result);
             }
-            else
-            {
-                results.Add(CreateResult(source.Name, SchemaObjectType.View, ComparisonStatus.Match));
-            }
+            else results.Add(CreateResult(source.Name, SchemaObjectType.View, ComparisonStatus.Match));
         }
 
-        foreach (var kvp in targetViewMap)
-        {
-            if (!sourceViewMap.ContainsKey(kvp.Key))
-            {
-                var target = kvp.Value;
-                results.Add(CreateResult(target.Name, SchemaObjectType.View, ComparisonStatus.MissingInSource, target.Definition));
-            }
-        }
+        foreach (var kvp in targetViewMap.Where(kvp => !sourceViewMap.ContainsKey(kvp.Key)))
+            results.Add(CreateResult(kvp.Value.Name, SchemaObjectType.View, ComparisonStatus.MissingInSource, kvp.Value.Definition));
+
+        return Task.CompletedTask;
     }
 
-    // --- TRIGGERS ---
-    private async Task CompareTriggersAsync(
+    // --- TRIGGERS --- uses snapshot Definition — no DB calls
+    private Task CompareTriggersAsync(
         IDatabaseSchemaProvider sourceProvider,
         IDatabaseSchemaProvider targetProvider,
         Dictionary<string, DbTriggerDefinition> sourceTriggerMap,
@@ -1006,23 +1017,22 @@ public class SchemaComparer : ISchemaComparer
     {
         var sourceDbKind = GetDbKind(sourceProvider);
         var targetDbKind = GetDbKind(targetProvider);
-        
         int total = sourceTriggerMap.Count;
         int index = 0;
+
         foreach (var kvp in sourceTriggerMap)
         {
-            var triggerKey = kvp.Key;
             var source = kvp.Value;
             progressLogger?.Invoke(++index, total, $"⏰ Comparing trigger: {source.Name}", true);
 
-            if (!targetTriggerMap.TryGetValue(triggerKey, out var target))
+            if (!targetTriggerMap.TryGetValue(kvp.Key, out var target))
             {
-                results.Add(CreateResult(source.Name, SchemaObjectType.Trigger, ComparisonStatus.MissingInTarget, source.Definition));
+                results.Add(CreateResult(source.Name, SchemaObjectType.Trigger, ComparisonStatus.MissingInTarget, source.Definition ?? ""));
                 continue;
             }
 
-            var sourceDef = await sourceProvider.GetTriggerDefinitionAsync(source.Name);
-            var targetDef = await targetProvider.GetTriggerDefinitionAsync(target.Name);
+            var sourceDef = source.Definition;
+            var targetDef = target.Definition;
 
             if (!AreScriptsEqual(sourceDef, targetDef, sourceDbKind, targetDbKind, options))
             {
@@ -1048,9 +1058,11 @@ public class SchemaComparer : ISchemaComparer
             if (!sourceTriggerMap.ContainsKey(kvp.Key))
             {
                 var target = kvp.Value;
-                results.Add(CreateResult(target.Name, SchemaObjectType.Trigger, ComparisonStatus.MissingInSource, target.Definition));
+                results.Add(CreateResult(target.Name, SchemaObjectType.Trigger, ComparisonStatus.MissingInSource, target.Definition ?? ""));
             }
         }
+
+        return Task.CompletedTask;
     }
 
     private ComparisonResult CreateResult(string name, SchemaObjectType type, ComparisonStatus status, string diffScript = "")

@@ -1,0 +1,65 @@
+{
+  "title": "Dhanman Schema — QA vs TEST",
+  "comparisons": [
+    {
+      "name": "Common",
+      "source": "${COMMONDB_QA}",
+      "target": "${COMMONDB_TEST}",
+      "sourceLabel": "QA",
+      "targetLabel": "TEST",
+      "outputFile": "gh-pages/qa-vs-test/common.html",
+      "generateSync": false,
+      "optional": false
+    },
+    {
+      "name": "Community",
+      "source": "${COMMUNITYDB_QA}",
+      "target": "${COMMUNITYDB_TEST}",
+      "sourceLabel": "QA",
+      "targetLabel": "TEST",
+      "outputFile": "gh-pages/qa-vs-test/community.html",
+      "generateSync": false,
+      "optional": false
+    },
+    {
+      "name": "Inventory",
+      "source": "${INVENTORYDB_QA}",
+      "target": "${INVENTORYDB_TEST}",
+      "sourceLabel": "QA",
+      "targetLabel": "TEST",
+      "outputFile": "gh-pages/qa-vs-test/inventory.html",
+      "generateSync": false,
+      "optional": false
+    },
+    {
+      "name": "Payroll",
+      "source": "${PAYROLLDB_QA}",
+      "target": "${PAYROLLDB_TEST}",
+      "sourceLabel": "QA",
+      "targetLabel": "TEST",
+      "outputFile": "gh-pages/qa-vs-test/payroll.html",
+      "generateSync": false,
+      "optional": false
+    },
+    {
+      "name": "Purchase",
+      "source": "${PURCHASEDB_QA}",
+      "target": "${PURCHASEDB_TEST}",
+      "sourceLabel": "QA",
+      "targetLabel": "TEST",
+      "outputFile": "gh-pages/qa-vs-test/purchase.html",
+      "generateSync": false,
+      "optional": false
+    },
+    {
+      "name": "Sales",
+      "source": "${SALESDB_QA}",
+      "target": "${SALESDB_TEST}",
+      "sourceLabel": "QA",
+      "targetLabel": "TEST",
+      "outputFile": "gh-pages/qa-vs-test/sales.html",
+      "generateSync": false,
+      "optional": false
+    }
+  ]
+}

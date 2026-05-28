@@ -38,15 +38,15 @@ internal class Program
 
             if (argsParsed.IsBatchMode)
             {
-                Log.Logger.Information("Starting batch mode from configuration file: {ConfigFile}", argsParsed.BatchConfigFile);
+                Log.Logger.Information("Starting batch mode: {ConfigFile}", argsParsed.BatchConfigFile);
                 var batchConfig = await BatchProcessor.LoadBatchConfigurationAsync(argsParsed.BatchConfigFile);
                 if (batchConfig == null)
                 {
-                    Log.Logger.Fatal("Failed to load batch configuration file");
+                    Log.Logger.Fatal("Failed to load batch config file");
                     return 3;
                 }
-                await BatchProcessor.ProcessBatchAsync(batchConfig, argsParsed.TestMode, argsParsed.TestObjectLimit);
-                return 0;
+                return await BatchProcessor.ProcessBatchAsync(
+                    batchConfig, argsParsed.TestMode, argsParsed.TestObjectLimit, argsParsed.FailOnDrift);
             }
 
             if (argsParsed.IsExtract)
@@ -125,6 +125,29 @@ internal class Program
             };
             await HtmlReportGenerator.GenerateWithRazorAsync(report, argsParsed.OutputFile);
             Log.Logger.Information("✅ Report written to: {OutputFile}", argsParsed.OutputFile);
+
+            // ── Email on drift ────────────────────────────────────────────────
+            var driftCount = mismatchCount + missingInTargetCount + missingInSourceCount;
+            if (driftCount > 0)
+            {
+                var emailConfig = EmailService.ReadFromEnvironment();
+                if (emailConfig != null)
+                {
+                    var emailSubject = $"⚠️ Schema Drift Detected — {argsParsed.Title} ({driftCount} issue(s))";
+                    var emailBody    = EmailService.BuildDriftEmailBody(
+                        argsParsed.Title, argsParsed.SourceLabel, argsParsed.TargetLabel,
+                        resultList, matchCount, mismatchCount, missingInTargetCount, missingInSourceCount);
+                    try
+                    {
+                        await EmailService.SendDriftReportAsync(emailConfig, emailSubject, emailBody, argsParsed.OutputFile);
+                        Log.Logger.Information("📧 Drift report emailed to: {To}", string.Join(", ", emailConfig.To));
+                    }
+                    catch (Exception emailEx)
+                    {
+                        Log.Logger.Warning(emailEx, "📧 Failed to send drift report email — check SMTP env vars");
+                    }
+                }
+            }
 
             if (argsParsed.GenerateSync)
             {

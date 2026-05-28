@@ -1,3 +1,6 @@
+# Local settings — never commit
+appsettings.local.json
+
 # Ignore all bin and obj folders anywhere in the repo
 **/bin/
 **/obj/

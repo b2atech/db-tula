@@ -27,20 +27,32 @@ public class BulkSchemaFetcher
 
     public async Task<SchemaSnapshot> TakeSnapshotAsync(CancellationToken ct = default)
     {
-        var tablesTask      = FetchTableNamesAsync();
-        var columnsTask     = FetchAllColumnsAsync();
-        var pksTask         = FetchAllPrimaryKeysAsync();
-        var fksTask         = FetchAllForeignKeysAsync();
-        var indexesTask     = FetchAllIndexesAsync();
-        var uniqueConsTask  = FetchAllUniqueConstraintsAsync();
-        var checkConsTask   = FetchAllCheckConstraintsAsync();
-        var functionsTask   = FetchAllFunctionsAsync();
-        var proceduresTask  = FetchAllProceduresAsync();
-        var viewsTask       = FetchAllViewsAsync();
-        var triggersTask    = FetchAllTriggersAsync();
-        var sequencesTask   = FetchAllSequencesAsync();
-        var matviewsTask    = FetchMaterializedViewNamesAsync();
-        var enumsTask       = FetchAllEnumsAsync();
+        ct.ThrowIfCancellationRequested();
+
+        // Throttle to 5 concurrent connections — prevents WireGuard/firewall drops
+        // when both QA and PROD snapshots run in parallel (14 × 2 = 28 raw connections).
+        using var sem = new SemaphoreSlim(5, 5);
+        async Task<T> Run<T>(Func<Task<T>> fn)
+        {
+            await sem.WaitAsync(ct);
+            try   { return await fn(); }
+            finally { sem.Release(); }
+        }
+
+        var tablesTask     = Run(FetchTableNamesAsync);
+        var columnsTask    = Run(FetchAllColumnsAsync);
+        var pksTask        = Run(FetchAllPrimaryKeysAsync);
+        var fksTask        = Run(FetchAllForeignKeysAsync);
+        var indexesTask    = Run(FetchAllIndexesAsync);
+        var uniqueConsTask = Run(FetchAllUniqueConstraintsAsync);
+        var checkConsTask  = Run(FetchAllCheckConstraintsAsync);
+        var functionsTask  = Run(FetchAllFunctionsAsync);
+        var proceduresTask = Run(FetchAllProceduresAsync);
+        var viewsTask      = Run(FetchAllViewsAsync);
+        var triggersTask   = Run(FetchAllTriggersAsync);
+        var sequencesTask  = Run(FetchAllSequencesAsync);
+        var matviewsTask   = Run(FetchMaterializedViewNamesAsync);
+        var enumsTask      = Run(FetchAllEnumsAsync);
 
         await Task.WhenAll(
             tablesTask, columnsTask, pksTask, fksTask, indexesTask,

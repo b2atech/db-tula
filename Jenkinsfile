@@ -16,7 +16,7 @@ pipeline {
     }
 
     environment {
-        // QA (54.37.159.71) — existing services
+        // QA connection strings
         COMMONDB_QA     = credentials('CONNECTIONSTRINGS__COMMONDB_QA')
         COMMUNITYDB_QA  = credentials('CONNECTIONSTRINGS__COMMUNITYDB_QA')
         INVENTORYDB_QA  = credentials('CONNECTIONSTRINGS__INVENTORYDB_QA')
@@ -24,7 +24,7 @@ pipeline {
         PURCHASEDB_QA   = credentials('CONNECTIONSTRINGS__PURCHASEDB_QA')
         SALESDB_QA      = credentials('CONNECTIONSTRINGS__SALESDB_QA')
 
-        // PROD (51.79.156.217) — existing services
+        // PROD connection strings
         COMMONDB_PROD     = credentials('CONNECTIONSTRINGS__COMMONDB_PROD')
         COMMUNITYDB_PROD  = credentials('CONNECTIONSTRINGS__COMMUNITYDB_PROD')
         INVENTORYDB_PROD  = credentials('CONNECTIONSTRINGS__INVENTORYDB_PROD')
@@ -32,13 +32,21 @@ pipeline {
         PURCHASEDB_PROD   = credentials('CONNECTIONSTRINGS__PURCHASEDB_PROD')
         SALESDB_PROD      = credentials('CONNECTIONSTRINGS__SALESDB_PROD')
 
-        // TEST — existing services
+        // TEST connection strings
         COMMONDB_TEST     = credentials('CONNECTIONSTRINGS__COMMONDB_TEST')
         COMMUNITYDB_TEST  = credentials('CONNECTIONSTRINGS__COMMUNITYDB_TEST')
         INVENTORYDB_TEST  = credentials('CONNECTIONSTRINGS__INVENTORYDB_TEST')
         PAYROLLDB_TEST    = credentials('CONNECTIONSTRINGS__PAYROLLDB_TEST')
         PURCHASEDB_TEST   = credentials('CONNECTIONSTRINGS__PURCHASEDB_TEST')
         SALESDB_TEST      = credentials('CONNECTIONSTRINGS__SALESDB_TEST')
+
+        // Email (Gmail App Password) — set in Jenkins credentials
+        DBTULA_SMTP_HOST = 'smtp.gmail.com'
+        DBTULA_SMTP_PORT = '587'
+        DBTULA_SMTP_USER = credentials('DBTULA_SMTP_USER')
+        DBTULA_SMTP_PASS = credentials('DBTULA_SMTP_PASS')
+        DBTULA_SMTP_FROM = credentials('DBTULA_SMTP_USER')
+        DBTULA_SMTP_TO   = credentials('DBTULA_SMTP_TO')
 
         DO_HOST       = credentials('DO_HOST')
         DO_USER       = credentials('DO_USER')
@@ -95,83 +103,26 @@ pipeline {
             }
         }
 
-        // Run QA-vs-PROD and QA-vs-TEST comparisons in parallel
+        // QA-vs-PROD and QA-vs-TEST run in parallel — each batch runs its services sequentially.
+        // Email is sent once per batch (QA-vs-PROD only) if any drift is found.
         stage('Schema Comparisons') {
             parallel {
 
                 stage('QA vs PROD') {
                     steps {
+                        sh 'mkdir -p gh-pages/qa-vs-prod'
                         script {
-                            def driftDetected = false
-                            def services = [
-                                [id: 'COMMON',    label: 'Common'],
-                                [id: 'COMMUNITY', label: 'Community'],
-                                [id: 'INVENTORY', label: 'Inventory'],
-                                [id: 'PAYROLL',   label: 'Payroll'],
-                                [id: 'PURCHASE',  label: 'Purchase'],
-                                [id: 'SALES',     label: 'Sales'],
-                            ]
-
-                            sh 'mkdir -p gh-pages/qa-vs-prod'
-
-                            services.each { svc ->
-                                def qaConn   = env["${svc.id}DB_QA"]
-                                def prodConn = env["${svc.id}DB_PROD"]
-                                def outFile  = "gh-pages/qa-vs-prod/${svc.id.toLowerCase()}.html"
-
-                                def exitCode = sh(returnStatus: true, script: """
-                                    ${DBTULA} \
-                                        --source  "${qaConn}"   --source-label  QA \
-                                        --target  "${prodConn}" --target-label  PROD \
-                                        --title   "${svc.label} Schema (QA vs PROD)" \
-                                        --out     "${outFile}" \
-                                        --generate-sync \
-                                        --sync-out "gh-pages/qa-vs-prod/${svc.id.toLowerCase()}-sync.sql" \
-                                        --fail-on-drift
-                                """)
-
-                                if (exitCode == 2) {
-                                    echo "🚨 ${svc.label}: objects missing in PROD (exit ${exitCode})"
-                                    driftDetected = true
-                                } else if (exitCode == 1) {
-                                    echo "⚠️  ${svc.label}: schema mismatches detected (exit ${exitCode})"
-                                    driftDetected = true
-                                } else if (exitCode >= 3) {
-                                    error("❌ ${svc.label} QA-vs-PROD comparison failed (exit ${exitCode})")
-                                }
-                            }
-
-                            // Optional new services — skip gracefully if credentials missing
-                            def newServices = [
-                                [id: 'PAYMENT',  label: 'Payment'],
-                                [id: 'DOCUMENT', label: 'Document'],
-                                [id: 'AGENT',    label: 'Agent'],
-                                [id: 'EINVOICE', label: 'EInvoice'],
-                            ]
-                            newServices.each { svc ->
-                                try {
-                                    withCredentials([
-                                        string(credentialsId: "CONNECTIONSTRINGS__${svc.id}DB_QA",   variable: 'SVC_QA'),
-                                        string(credentialsId: "CONNECTIONSTRINGS__${svc.id}DB_PROD", variable: 'SVC_PROD'),
-                                    ]) {
-                                        def exitCode = sh(returnStatus: true, script: """
-                                            ${DBTULA} \
-                                                --source  "\$SVC_QA"   --source-label QA \
-                                                --target  "\$SVC_PROD" --target-label PROD \
-                                                --title   "${svc.label} Schema (QA vs PROD)" \
-                                                --out     "gh-pages/qa-vs-prod/${svc.id.toLowerCase()}.html" \
-                                                --fail-on-drift
-                                        """)
-                                        if (exitCode > 0 && exitCode < 3) driftDetected = true
-                                    }
-                                } catch (e) {
-                                    echo "⏭  Skipping ${svc.label} — credentials not configured: ${e.message}"
-                                }
-                            }
-
-                            if (driftDetected) {
+                            def exitCode = sh(returnStatus: true, script: """
+                                ${DBTULA} --batch batch-qa-vs-prod.json --fail-on-drift
+                            """)
+                            if (exitCode == 2) {
                                 currentBuild.result = 'UNSTABLE'
-                                echo '⚠️  QA vs PROD drift detected — build marked UNSTABLE'
+                                echo '🚨 QA vs PROD: objects missing in PROD — build marked UNSTABLE'
+                            } else if (exitCode == 1) {
+                                currentBuild.result = 'UNSTABLE'
+                                echo '⚠️  QA vs PROD: schema mismatches detected — build marked UNSTABLE'
+                            } else if (exitCode >= 3) {
+                                error('❌ QA vs PROD batch failed — check logs for connection errors')
                             }
                         }
                     }
@@ -179,33 +130,9 @@ pipeline {
 
                 stage('QA vs TEST') {
                     steps {
-                        script {
-                            def services = [
-                                [id: 'COMMON',    label: 'Common'],
-                                [id: 'COMMUNITY', label: 'Community'],
-                                [id: 'INVENTORY', label: 'Inventory'],
-                                [id: 'PAYROLL',   label: 'Payroll'],
-                                [id: 'PURCHASE',  label: 'Purchase'],
-                                [id: 'SALES',     label: 'Sales'],
-                            ]
-
-                            sh 'mkdir -p gh-pages/qa-vs-test'
-
-                            services.each { svc ->
-                                def qaConn   = env["${svc.id}DB_QA"]
-                                def testConn = env["${svc.id}DB_TEST"]
-
-                                sh """
-                                    ${DBTULA} \
-                                        --source  "${qaConn}"   --source-label  QA \
-                                        --target  "${testConn}" --target-label  TEST \
-                                        --title   "${svc.label} Schema (QA vs TEST)" \
-                                        --out     "gh-pages/qa-vs-test/${svc.id.toLowerCase()}.html" \
-                                        || true
-                                """
-                                // QA-vs-TEST does not fail the build — TEST env can legitimately lag
-                            }
-                        }
+                        sh 'mkdir -p gh-pages/qa-vs-test'
+                        sh "${DBTULA} --batch batch-qa-vs-test.json || true"
+                        // QA-vs-TEST: informational only — does not fail or send email
                     }
                 }
 

@@ -370,38 +370,61 @@
                     <td>@Raw(RenderIcon(item.HasIndexMismatch, "Index"))</td>
                     <td>@Raw(RenderIcon(item.HasCreateScriptMismatch, "Script"))</td> *@
                     <td>
-                        @if (!string.IsNullOrWhiteSpace(combinedScript))
+                        @{
+                            var scriptId     = $"script-{diffId}";
+                            var sideBySideId = $"sbs-{diffId}";
+                            // For missing items with no definition, show a placeholder so the button always appears
+                            var displayScript = combinedScript;
+                            if (string.IsNullOrWhiteSpace(displayScript) && item.Status != ComparisonStatus.Match)
+                            {
+                                displayScript = item.Status == ComparisonStatus.MissingInTarget
+                                    ? $"-- '{item.Name}' ({item.ObjectType}) exists in source but is missing in target."
+                                    : $"-- '{item.Name}' ({item.ObjectType}) exists in target but is missing in source.";
+                            }
+                            if (!string.IsNullOrWhiteSpace(combinedScript))
+                                allSyncScripts.AppendLine($"-- {item.ObjectType}: {item.Name}\n{combinedScript}\n");
+                        }
+                        @if (!string.IsNullOrWhiteSpace(displayScript))
                         {
-                            var scriptId = $"script-{diffId}";
-                            var buttonId = $"btn-toggle-{diffId}";
-                            var sideBySideId = $"sidebyside-{diffId}";
-                            var viewToggleId = $"toggle-view-{diffId}";
-                            allSyncScripts.AppendLine($"-- {item.ObjectType}: {item.Name}\n{combinedScript}\n");
-                            <div class="code-block">
-                                <div class="d-flex justify-content-start gap-2 mb-2 diff-controls">
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('@diffId')">Copy</button>
-                                    <button class="btn btn-sm btn-outline-primary" id="@buttonId" onclick="toggleScript('@scriptId', '@buttonId')">Show Details</button>
-                                    @if (item.HasSideBySideDiff)
-                                    {
-                                        <button class="btn btn-sm btn-outline-info diff-toggle-btn" id="@viewToggleId" onclick="toggleDiffView('@scriptId', '@sideBySideId', '@viewToggleId')">Side-by-Side View</button>
-                                    }
-                                </div>
-                                <div id="@scriptId" style="display: none;">
-                                    <pre><code class="language-sql hljs" id="@diffId">@combinedScript</code></pre>
-                                </div>
-                                @if (item.HasSideBySideDiff)
-                                {
-                                    <div id="@sideBySideId" style="display: none;">
-                                        @(new RawString(item.SideBySideDiffHtml))
-                                    </div>
-                                }
-                            </div>
+                            <button class="btn btn-sm btn-outline-primary"
+                                    data-simple="@scriptId"
+                                    data-sbs="@(item.HasSideBySideDiff ? sideBySideId : "")"
+                                    data-name="@item.Name"
+                                    data-type="@item.ObjectType"
+                                    onclick="openDiffModal(this)">View Diff</button>
+                            <div id="@scriptId" style="display:none">@displayScript</div>
+                            @if (item.HasSideBySideDiff)
+                            {
+                                <div id="@sideBySideId" style="display:none">@(new RawString(item.SideBySideDiffHtml))</div>
+                            }
                         }
                     </td>
                 </tr>
             }
         </tbody>
     </table>
+    <!-- Diff Modal -->
+    <div class="modal fade" id="diffModal" tabindex="-1" aria-labelledby="diffModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="diffModalLabel">Diff</h5>
+                    <div class="ms-auto d-flex gap-2 me-3">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="copyModalContent()">Copy</button>
+                        <button class="btn btn-sm btn-outline-info" id="modalViewToggleBtn" onclick="toggleModalView()" style="display:none">Side-by-Side View</button>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="modalSimpleView" class="p-3">
+                        <pre style="margin:0"><code class="language-sql" id="modalSimpleCode"></code></pre>
+                    </div>
+                    <div id="modalSideBySideView" style="display:none"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     @if (allSyncScripts.Length > 0)
     {
         var scriptBlockId = "sync-all-script";
@@ -439,17 +462,11 @@
             const rows = document.querySelectorAll('table tbody tr[data-comparison]');
             rows.forEach(row => {
                 const comparison = row.dataset.comparison;
-                const isMismatch = comparison === 'Mismatch';
-                const isMissingSource = comparison === 'MissingInSource';
-                const isMissingTarget = comparison === 'MissingInTarget';
-                if (!mismatch && !missingSource && !missingTarget) {
-                    row.style.display = '';
-                    return;
-                }
+                if (!mismatch && !missingSource && !missingTarget) { row.style.display = ''; return; }
                 const shouldShow =
-                    (mismatch && isMismatch) ||
-                    (missingSource && isMissingSource) ||
-                    (missingTarget && isMissingTarget);
+                    (mismatch && comparison === 'Mismatch') ||
+                    (missingSource && comparison === 'MissingInSource') ||
+                    (missingTarget && comparison === 'MissingInTarget');
                 row.style.display = shouldShow ? '' : 'none';
             });
         }
@@ -457,82 +474,58 @@
             const el = document.getElementById(id);
             navigator.clipboard.writeText(el.innerText).then(() => alert('Copied to clipboard'));
         }
-        function toggleScript(scriptId, buttonId) {
-            const scriptEl = document.getElementById(scriptId);
-            const buttonEl = document.getElementById(buttonId);
-            if (scriptEl.style.display === 'none') {
-                scriptEl.style.display = 'block';
-                buttonEl.textContent = 'Hide Details';
-            } else {
-                scriptEl.style.display = 'none';
-                buttonEl.textContent = 'Show Details';
-            }
-        }
-        function toggleDiffView(simpleId, sideBySideId, toggleButtonId) {
-            const simpleEl = document.getElementById(simpleId);
-            const sideBySideEl = document.getElementById(sideBySideId);
-            const toggleBtn = document.getElementById(toggleButtonId);
-            if (sideBySideEl.style.display === 'none') {
-                // Switch to side-by-side view
-                simpleEl.style.display = 'none';
-                sideBySideEl.style.display = 'block';
-                toggleBtn.textContent = 'Simple View';
-                toggleBtn.className = 'btn btn-sm btn-outline-secondary diff-toggle-btn';
+        var _modalCopyText = '';
+        function openDiffModal(btn) {
+            const simpleId  = btn.dataset.simple;
+            const sbsId     = btn.dataset.sbs;
+            const name      = btn.dataset.name;
+            const type      = btn.dataset.type;
 
-                // Re-apply syntax highlighting to the side-by-side view
-                requestAnimationFrame(() => {
-                    const codeElements = sideBySideEl.querySelectorAll('code.language-sql');
-                    codeElements.forEach(el => hljs.highlightElement(el));
+            const simpleEl  = document.getElementById(simpleId);
+            _modalCopyText  = simpleEl ? simpleEl.textContent : '';
+
+            document.getElementById('diffModalLabel').textContent = type + ': ' + name;
+
+            const codeEl = document.getElementById('modalSimpleCode');
+            codeEl.removeAttribute('data-highlighted');
+            codeEl.textContent = _modalCopyText;
+            hljs.highlightElement(codeEl);
+
+            const sbsView = document.getElementById('modalSideBySideView');
+            const sbsEl   = sbsId ? document.getElementById(sbsId) : null;
+            if (sbsEl) {
+                sbsView.innerHTML = sbsEl.innerHTML;
+                sbsView.querySelectorAll('code.language-sql').forEach(el => {
+                    el.removeAttribute('data-highlighted');
+                    hljs.highlightElement(el);
                 });
-            } else {
-                // Switch to simple view
-                sideBySideEl.style.display = 'none';
-                simpleEl.style.display = 'block';
-                toggleBtn.textContent = 'Side-by-Side View';
-                toggleBtn.className = 'btn btn-sm btn-outline-info diff-toggle-btn';
             }
+
+            const hasSbs    = !!sbsEl;
+            const toggleBtn = document.getElementById('modalViewToggleBtn');
+            toggleBtn.style.display = hasSbs ? '' : 'none';
+
+            // Default to side-by-side when available, simple view otherwise
+            const startSbs = hasSbs;
+            document.getElementById('modalSimpleView').style.display = startSbs ? 'none' : '';
+            sbsView.style.display    = startSbs ? '' : 'none';
+            toggleBtn.textContent    = startSbs ? 'Simple View'          : 'Side-by-Side View';
+            toggleBtn.className      = startSbs ? 'btn btn-sm btn-outline-secondary' : 'btn btn-sm btn-outline-info';
+
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('diffModal')).show();
         }
-        // Keyboard navigation for diff views
-        document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey || e.metaKey) {
-                switch(e.key) {
-                    case 'k':
-                        e.preventDefault();
-                        // Navigate to previous diff
-                        navigateToDiff(-1);
-                        break;
-                    case 'j':
-                        e.preventDefault();
-                        // Navigate to next diff
-                        navigateToDiff(1);
-                        break;
-                }
-            }
-        });
-        function navigateToDiff(direction) {
-            const diffElements = document.querySelectorAll('.code-block');
-            const currentActive = document.querySelector('.code-block.active') || diffElements[0];
-
-            if (!currentActive) return;
-            const currentIndex = Array.from(diffElements).indexOf(currentActive);
-            let nextIndex = currentIndex + direction;
-
-            if (nextIndex < 0) nextIndex = diffElements.length - 1;
-            if (nextIndex >= diffElements.length) nextIndex = 0;
-
-            // Remove active class from current
-            diffElements.forEach(el => el.classList.remove('active'));
-
-            // Add active class to next and scroll into view
-            const nextElement = diffElements[nextIndex];
-            nextElement.classList.add('active');
-            nextElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-            // Add visual indicator
-            nextElement.style.boxShadow = '0 0 10px rgba(0, 123, 255, 0.5)';
-            setTimeout(() => {
-                nextElement.style.boxShadow = '';
-            }, 2000);
+        function toggleModalView() {
+            const simpleView = document.getElementById('modalSimpleView');
+            const sbsView    = document.getElementById('modalSideBySideView');
+            const btn        = document.getElementById('modalViewToggleBtn');
+            const showSbs    = sbsView.style.display === 'none';
+            simpleView.style.display = showSbs ? 'none' : '';
+            sbsView.style.display    = showSbs ? ''     : 'none';
+            btn.textContent  = showSbs ? 'Simple View'     : 'Side-by-Side View';
+            btn.className    = showSbs ? 'btn btn-sm btn-outline-secondary' : 'btn btn-sm btn-outline-info';
+        }
+        function copyModalContent() {
+            navigator.clipboard.writeText(_modalCopyText).then(() => alert('Copied to clipboard'));
         }
     </script>
 </body>

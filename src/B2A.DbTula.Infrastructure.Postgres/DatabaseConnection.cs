@@ -69,7 +69,7 @@ public class DatabaseConnection
         catch (Exception ex)
         {
             LogError($"[ExecuteQueryAsync] Error executing query:\n{query}\n{ex}");
-            return new DataTable();
+            throw;
         }
     }
 
@@ -95,7 +95,7 @@ public class DatabaseConnection
         catch (Exception ex)
         {
             LogError($"[ExecuteQueryAsync with Parameters] Error executing query:\n{query}\n{ex}");
-            return new DataTable();
+            throw;
         }
     }
 
@@ -111,6 +111,7 @@ public class DatabaseConnection
         catch (Exception ex)
         {
             LogError($"[ExecuteCommandAsync] Error executing command:\n{sqlCommand}\n{ex}");
+            throw;
         }
     }
 
