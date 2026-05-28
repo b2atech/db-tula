@@ -19,6 +19,22 @@ public class ComparisonResult
 
     public List<ComparisonSubResult> SubResults { get; set; } = new();
 
+    /// <summary>
+    /// Atlas-style lint code (DS102, MF103, CD101, etc.).
+    /// Null when the change has no known risk classification.
+    /// </summary>
+    public string? LintCode { get; set; }
+
+    /// <summary>
+    /// Risk severity derived from the lint code.
+    /// </summary>
+    public LintSeverity Severity { get; set; } = LintSeverity.None;
+
+    /// <summary>
+    /// Human-readable description of the lint rule that fired.
+    /// </summary>
+    public string? LintMessage { get; set; }
+
     public string DisplayType => ObjectType.ToDisplayString();
     public string DisplayStatus => Status.ToDisplayString();
 

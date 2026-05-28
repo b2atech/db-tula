@@ -96,6 +96,9 @@ internal class Program
 
             var resultList = comparisonResults.ToList();
 
+            // Annotate with Atlas-style lint codes (DS102, MF103, CD101, etc.)
+            SchemaLinter.Annotate(resultList);
+
             int matchCount         = resultList.Count(r => r.Status == ComparisonStatus.Match);
             int mismatchCount      = resultList.Count(r => r.Status == ComparisonStatus.Mismatch);
             int missingInTargetCount = resultList.Count(r => r.Status == ComparisonStatus.MissingInTarget);

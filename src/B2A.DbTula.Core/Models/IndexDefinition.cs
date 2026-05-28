@@ -3,13 +3,25 @@ namespace B2A.DbTula.Core.Models;
 public class IndexDefinition
 {
     public string Name { get; set; } = string.Empty;
-    public List<string> Columns { get; set; } = new(); // Handles composite indexes
+    public List<string> Columns { get; set; } = new();
     public bool IsUnique { get; set; }
-    public string IndexType { get; set; } = string.Empty; // Optional: btree, gin, etc.
-    public string CreateScript { get; set; } = string.Empty; // <-- new
-    
+    public string IndexType { get; set; } = string.Empty;
+    public string CreateScript { get; set; } = string.Empty;
+
     /// <summary>
-    /// Optional predicate for partial indexes (WHERE clause)
+    /// Columns in the INCLUDE clause (Postgres 11+, covering indexes).
+    /// These are stored but not used for index lookups.
+    /// </summary>
+    public List<string> IncludedColumns { get; set; } = [];
+
+    /// <summary>
+    /// NULLS NOT DISTINCT behaviour for unique indexes (Postgres 15+).
+    /// Null means not specified (old behaviour: nulls are always distinct).
+    /// </summary>
+    public bool? NullsDistinct { get; set; }
+
+    /// <summary>
+    /// Optional predicate for partial indexes (WHERE clause).
     /// </summary>
     public string? Predicate { get; set; }
 
@@ -18,12 +30,14 @@ public class IndexDefinition
     /// </summary>
     public string GetStructuralKey()
     {
-        var columnList = string.Join(",", Columns.Select(c => c.ToLower()));
+        var columnList  = string.Join(",", Columns.Select(c => c.ToLower()));
+        var includedList = string.Join(",", IncludedColumns.Select(c => c.ToLower()));
         var indexMethod = IndexType.ToLower();
-        var uniqueness = IsUnique ? "unique" : "nonunique";
-        var predicate = NormalizePredicate(Predicate);
-        
-        return $"{indexMethod}:{uniqueness}:{columnList}:{predicate}";
+        var uniqueness  = IsUnique ? "unique" : "nonunique";
+        var predicate   = NormalizePredicate(Predicate);
+        var nullsDistinct = NullsDistinct.HasValue ? (NullsDistinct.Value ? "nd:true" : "nd:false") : "";
+
+        return $"{indexMethod}:{uniqueness}:{columnList}:incl:{includedList}:{predicate}:{nullsDistinct}";
     }
 
     /// <summary>
@@ -36,6 +50,8 @@ public class IndexDefinition
         return IsUnique == other.IsUnique &&
                string.Equals(IndexType, other.IndexType, StringComparison.OrdinalIgnoreCase) &&
                Columns.SequenceEqual(other.Columns, StringComparer.OrdinalIgnoreCase) &&
+               IncludedColumns.SequenceEqual(other.IncludedColumns, StringComparer.OrdinalIgnoreCase) &&
+               NullsDistinct == other.NullsDistinct &&
                string.Equals(NormalizePredicate(Predicate), NormalizePredicate(other.Predicate), StringComparison.OrdinalIgnoreCase);
     }
 

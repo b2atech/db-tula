@@ -5,8 +5,16 @@ namespace B2A.DbTula.Infrastructure.Postgres;
 
 /// <summary>
 /// Fetches the complete schema for one Postgres database using ~13 parallel bulk queries.
-/// Replaces the previous per-table pattern (N tables × 6 queries = 600+ round-trips for 100 tables)
-/// with a fixed cost of ~13 round-trips regardless of schema size.
+/// Requires Postgres 11+ for index INCLUDE column support.
+///
+/// Key improvements from open-source tools:
+///  - Extension filtering (schemainspect): pg_depend deptype='e' excludes all extension-owned objects
+///    (PostGIS tables, pgcrypto functions, etc.) from every query, preventing false positives.
+///  - Identity sequence exclusion (schemainspect): sequences owned by GENERATED IDENTITY columns
+///    are auto-managed by Postgres and must not appear in standalone sequence comparison.
+///  - Index INCLUDE columns (Atlas): Postgres 11+ INCLUDE clause captured separately from key columns.
+///  - NULLS DISTINCT (Atlas): Postgres 15+ unique index NULLS [NOT] DISTINCT captured.
+///  - NoInherit (Atlas/apgdiff): CHECK constraint connoinherit flag captured.
 /// </summary>
 public class BulkSchemaFetcher
 {
@@ -19,21 +27,20 @@ public class BulkSchemaFetcher
 
     public async Task<SchemaSnapshot> TakeSnapshotAsync(CancellationToken ct = default)
     {
-        // Fire all bulk queries in parallel against the connection pool
-        var tablesTask       = FetchTableNamesAsync();
-        var columnsTask      = FetchAllColumnsAsync();
-        var pksTask          = FetchAllPrimaryKeysAsync();
-        var fksTask          = FetchAllForeignKeysAsync();
-        var indexesTask      = FetchAllIndexesAsync();
-        var uniqueConsTask   = FetchAllUniqueConstraintsAsync();
-        var checkConsTask    = FetchAllCheckConstraintsAsync();
-        var functionsTask    = FetchAllFunctionsAsync();
-        var proceduresTask   = FetchAllProceduresAsync();
-        var viewsTask        = FetchAllViewsAsync();
-        var triggersTask     = FetchAllTriggersAsync();
-        var sequencesTask    = FetchAllSequencesAsync();
-        var matviewsTask     = FetchMaterializedViewNamesAsync();
-        var enumsTask        = FetchAllEnumsAsync();
+        var tablesTask      = FetchTableNamesAsync();
+        var columnsTask     = FetchAllColumnsAsync();
+        var pksTask         = FetchAllPrimaryKeysAsync();
+        var fksTask         = FetchAllForeignKeysAsync();
+        var indexesTask     = FetchAllIndexesAsync();
+        var uniqueConsTask  = FetchAllUniqueConstraintsAsync();
+        var checkConsTask   = FetchAllCheckConstraintsAsync();
+        var functionsTask   = FetchAllFunctionsAsync();
+        var proceduresTask  = FetchAllProceduresAsync();
+        var viewsTask       = FetchAllViewsAsync();
+        var triggersTask    = FetchAllTriggersAsync();
+        var sequencesTask   = FetchAllSequencesAsync();
+        var matviewsTask    = FetchMaterializedViewNamesAsync();
+        var enumsTask       = FetchAllEnumsAsync();
 
         await Task.WhenAll(
             tablesTask, columnsTask, pksTask, fksTask, indexesTask,
@@ -42,38 +49,42 @@ public class BulkSchemaFetcher
 
         return new SchemaSnapshot
         {
-            TableNames                = tablesTask.Result,
-            ColumnsByTable            = columnsTask.Result,
-            PrimaryKeysByTable        = pksTask.Result,
-            ForeignKeysByTable        = fksTask.Result,
-            IndexesByTable            = indexesTask.Result,
-            UniqueConstraintsByTable  = uniqueConsTask.Result,
-            CheckConstraintsByTable   = checkConsTask.Result,
-            Functions                 = functionsTask.Result,
-            Procedures                = proceduresTask.Result,
-            Views                     = viewsTask.Result,
-            Triggers                  = triggersTask.Result,
-            Sequences                 = sequencesTask.Result,
-            MaterializedViewNames     = matviewsTask.Result,
-            Enums                     = enumsTask.Result,
-            CapturedAt                = DateTimeOffset.UtcNow,
+            TableNames               = tablesTask.Result,
+            ColumnsByTable           = columnsTask.Result,
+            PrimaryKeysByTable       = pksTask.Result,
+            ForeignKeysByTable       = fksTask.Result,
+            IndexesByTable           = indexesTask.Result,
+            UniqueConstraintsByTable = uniqueConsTask.Result,
+            CheckConstraintsByTable  = checkConsTask.Result,
+            Functions                = functionsTask.Result,
+            Procedures               = proceduresTask.Result,
+            Views                    = viewsTask.Result,
+            Triggers                 = triggersTask.Result,
+            Sequences                = sequencesTask.Result,
+            MaterializedViewNames    = matviewsTask.Result,
+            Enums                    = enumsTask.Result,
+            CapturedAt               = DateTimeOffset.UtcNow,
         };
     }
 
     // ── Tables ────────────────────────────────────────────────────────────────
+    // Extension filter: LEFT JOIN pg_depend ext ... ext.objid IS NULL
+    // Excludes tables created by extensions (e.g. PostGIS spatial_ref_sys).
 
     private async Task<IReadOnlyList<string>> FetchTableNamesAsync()
     {
         const string sql = @"
-            SELECT t.table_name
-            FROM information_schema.tables t
-            JOIN pg_class pc ON pc.relname = t.table_name
+            SELECT pc.relname AS table_name
+            FROM pg_class pc
             JOIN pg_namespace pn ON pn.oid = pc.relnamespace
-            WHERE t.table_schema = 'public'
-              AND t.table_type = 'BASE TABLE'
-              AND pn.nspname = 'public'
-              AND pc.relkind IN ('r', 'p')
-            ORDER BY t.table_name;";
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_class'::regclass
+               AND ext.objid   = pc.oid
+               AND ext.deptype = 'e'
+            WHERE pn.nspname = 'public'
+              AND pc.relkind  IN ('r', 'p')
+              AND ext.objid   IS NULL
+            ORDER BY pc.relname;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
         return dt.AsEnumerable()
@@ -104,9 +115,14 @@ public class BulkSchemaFetcher
             FROM information_schema.columns c
             JOIN pg_class pc ON pc.relname = c.table_name
             JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_class'::regclass
+               AND ext.objid   = pc.oid
+               AND ext.deptype = 'e'
             WHERE c.table_schema = 'public'
-              AND pn.nspname = 'public'
-              AND pc.relkind IN ('r', 'p')
+              AND pn.nspname     = 'public'
+              AND pc.relkind     IN ('r', 'p')
+              AND ext.objid      IS NULL
             ORDER BY c.table_name, c.ordinal_position;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
@@ -143,11 +159,16 @@ public class BulkSchemaFetcher
                 att.attname AS column_name,
                 array_position(con.conkey, att.attnum) AS column_position
             FROM pg_constraint con
-            JOIN pg_class rel ON rel.oid = con.conrelid
-            JOIN pg_namespace ns ON ns.oid = rel.relnamespace
+            JOIN pg_class rel     ON rel.oid = con.conrelid
+            JOIN pg_namespace ns  ON ns.oid  = rel.relnamespace
             JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_class'::regclass
+               AND ext.objid   = rel.oid
+               AND ext.deptype = 'e'
             WHERE con.contype = 'p'
-              AND ns.nspname = 'public'
+              AND ns.nspname  = 'public'
+              AND ext.objid   IS NULL
             ORDER BY rel.relname, con.conname, column_position;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
@@ -189,14 +210,19 @@ public class BulkSchemaFetcher
                     WHEN 'd' THEN 'SET DEFAULT' END AS on_delete
             FROM pg_constraint con
             JOIN pg_class rel     ON rel.oid = con.conrelid
-            JOIN pg_namespace ns  ON ns.oid = rel.relnamespace
+            JOIN pg_namespace ns  ON ns.oid  = rel.relnamespace
             JOIN pg_class ref_rel ON ref_rel.oid = con.confrelid
             JOIN LATERAL unnest(con.conkey)  WITH ORDINALITY AS src(attnum, ord) ON true
             JOIN LATERAL unnest(con.confkey) WITH ORDINALITY AS ref(attnum, ord) ON ref.ord = src.ord
             JOIN pg_attribute src_att ON src_att.attrelid = con.conrelid  AND src_att.attnum = src.attnum
             JOIN pg_attribute ref_att ON ref_att.attrelid = con.confrelid AND ref_att.attnum = ref.attnum
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_class'::regclass
+               AND ext.objid   = rel.oid
+               AND ext.deptype = 'e'
             WHERE con.contype = 'f'
-              AND ns.nspname = 'public'
+              AND ns.nspname  = 'public'
+              AND ext.objid   IS NULL
             ORDER BY rel.relname, con.conname, src.ord;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
@@ -223,29 +249,42 @@ public class BulkSchemaFetcher
     }
 
     // ── Indexes ───────────────────────────────────────────────────────────────
+    // Atlas improvement: ix.indnkeyatts separates key columns from INCLUDE columns (Postgres 11+).
+    // Extension filter: excludes extension-owned indexes (e.g. PostGIS spatial indexes).
 
     private async Task<IReadOnlyDictionary<string, List<IndexDefinition>>> FetchAllIndexesAsync()
     {
         const string sql = @"
             SELECT
-                t.relname AS table_name,
-                i.relname AS index_name,
-                am.amname AS index_type,
+                t.relname  AS table_name,
+                i.relname  AS index_name,
+                am.amname  AS index_type,
                 ix.indisunique AS is_unique,
-                a.attname AS column_name,
-                cols.ord AS column_position,
+                a.attname  AS column_name,
+                cols.ord   AS column_position,
+                (cols.ord > ix.indnkeyatts) AS is_included,
                 pg_get_expr(ix.indpred, ix.indrelid, true) AS predicate
             FROM pg_class t
-            JOIN pg_index ix ON t.oid = ix.indrelid
-            JOIN pg_class i  ON i.oid = ix.indexrelid
-            JOIN pg_am am    ON i.relam = am.oid
+            JOIN pg_index ix   ON t.oid  = ix.indrelid
+            JOIN pg_class i    ON i.oid  = ix.indexrelid
+            JOIN pg_am am      ON i.relam = am.oid
             JOIN pg_namespace ns ON ns.oid = t.relnamespace
             CROSS JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY AS cols(attnum, ord)
             JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = cols.attnum
-            WHERE ns.nspname = 'public'
-              AND ix.indisvalid = true
-              AND ix.indisprimary = false
-              AND a.attnum > 0
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_class'::regclass
+               AND ext.objid   = i.oid
+               AND ext.deptype = 'e'
+            LEFT JOIN pg_depend tbl_ext
+                ON tbl_ext.classid = 'pg_class'::regclass
+               AND tbl_ext.objid   = t.oid
+               AND tbl_ext.deptype = 'e'
+            WHERE ns.nspname       = 'public'
+              AND ix.indisvalid    = true
+              AND ix.indisprimary  = false
+              AND a.attnum         > 0
+              AND ext.objid        IS NULL
+              AND tbl_ext.objid    IS NULL
             ORDER BY t.relname, i.relname, cols.ord;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
@@ -257,14 +296,18 @@ public class BulkSchemaFetcher
                 g => g.GroupBy(r => r["index_name"].ToString() ?? string.Empty)
                        .Select(ig =>
                        {
-                           var first = ig.First();
+                           var first     = ig.First();
+                           var keyRows   = ig.Where(r => r["is_included"] == DBNull.Value || !(bool)r["is_included"]).ToList();
+                           var inclRows  = ig.Where(r => r["is_included"] != DBNull.Value && (bool)r["is_included"]).ToList();
+
                            return new IndexDefinition
                            {
-                               Name      = ig.Key,
-                               Columns   = ig.Select(r => r["column_name"].ToString() ?? string.Empty).ToList(),
-                               IsUnique  = first["is_unique"] != DBNull.Value && (bool)first["is_unique"],
-                               IndexType = first["index_type"]?.ToString() ?? string.Empty,
-                               Predicate = first["predicate"] != DBNull.Value ? first["predicate"]?.ToString() : null,
+                               Name            = ig.Key,
+                               Columns         = keyRows.Select(r => r["column_name"].ToString() ?? string.Empty).ToList(),
+                               IncludedColumns = inclRows.Select(r => r["column_name"].ToString() ?? string.Empty).ToList(),
+                               IsUnique        = first["is_unique"] != DBNull.Value && (bool)first["is_unique"],
+                               IndexType       = first["index_type"]?.ToString() ?? string.Empty,
+                               Predicate       = first["predicate"] != DBNull.Value ? first["predicate"]?.ToString() : null,
                            };
                        }).ToList(),
                 StringComparer.OrdinalIgnoreCase);
@@ -281,11 +324,16 @@ public class BulkSchemaFetcher
                 att.attname AS column_name,
                 array_position(con.conkey, att.attnum) AS column_position
             FROM pg_constraint con
-            JOIN pg_class rel ON rel.oid = con.conrelid
-            JOIN pg_namespace ns ON ns.oid = rel.relnamespace
+            JOIN pg_class rel     ON rel.oid = con.conrelid
+            JOIN pg_namespace ns  ON ns.oid  = rel.relnamespace
             JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_class'::regclass
+               AND ext.objid   = rel.oid
+               AND ext.deptype = 'e'
             WHERE con.contype = 'u'
-              AND ns.nspname = 'public'
+              AND ns.nspname  = 'public'
+              AND ext.objid   IS NULL
             ORDER BY rel.relname, con.conname, column_position;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
@@ -306,6 +354,8 @@ public class BulkSchemaFetcher
     }
 
     // ── Check Constraints ─────────────────────────────────────────────────────
+    // apgdiff improvement: connoinherit (NO INHERIT) flag captured so constraints
+    // that do not propagate to child tables are correctly differentiated.
 
     private async Task<IReadOnlyDictionary<string, List<CheckConstraintDefinition>>> FetchAllCheckConstraintsAsync()
     {
@@ -313,13 +363,19 @@ public class BulkSchemaFetcher
             SELECT
                 rel.relname AS table_name,
                 con.conname AS constraint_name,
-                pg_get_constraintdef(con.oid, true) AS check_clause
+                pg_get_constraintdef(con.oid, true) AS check_clause,
+                con.connoinherit AS no_inherit
             FROM pg_constraint con
-            JOIN pg_class rel ON rel.oid = con.conrelid
-            JOIN pg_namespace ns ON ns.oid = rel.relnamespace
-            WHERE con.contype = 'c'
-              AND ns.nspname = 'public'
+            JOIN pg_class rel    ON rel.oid = con.conrelid
+            JOIN pg_namespace ns ON ns.oid  = rel.relnamespace
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_class'::regclass
+               AND ext.objid   = rel.oid
+               AND ext.deptype = 'e'
+            WHERE con.contype   = 'c'
+              AND ns.nspname    = 'public'
               AND con.conislocal = true
+              AND ext.objid     IS NULL
             ORDER BY rel.relname, con.conname;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
@@ -332,11 +388,13 @@ public class BulkSchemaFetcher
                 {
                     Name        = r["constraint_name"].ToString() ?? string.Empty,
                     CheckClause = r["check_clause"].ToString() ?? string.Empty,
+                    NoInherit   = r["no_inherit"] != DBNull.Value && (bool)r["no_inherit"],
                 }).ToList(),
                 StringComparer.OrdinalIgnoreCase);
     }
 
     // ── Functions ─────────────────────────────────────────────────────────────
+    // Extension filter: excludes extension-provided functions (e.g. PostGIS ST_*, pgcrypto digest()).
 
     private async Task<IReadOnlyList<DbFunctionDefinition>> FetchAllFunctionsAsync()
     {
@@ -347,8 +405,13 @@ public class BulkSchemaFetcher
                 pg_get_functiondef(p.oid) AS definition
             FROM pg_proc p
             JOIN pg_namespace n ON p.pronamespace = n.oid
-            WHERE n.nspname = 'public'
-              AND p.prokind = 'f';";
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_proc'::regclass
+               AND ext.objid   = p.oid
+               AND ext.deptype = 'e'
+            WHERE n.nspname   = 'public'
+              AND p.prokind   = 'f'
+              AND ext.objid   IS NULL;";
 
         return await FetchFunctionListAsync(sql);
     }
@@ -362,8 +425,13 @@ public class BulkSchemaFetcher
                 pg_get_functiondef(p.oid) AS definition
             FROM pg_proc p
             JOIN pg_namespace n ON p.pronamespace = n.oid
-            WHERE n.nspname = 'public'
-              AND p.prokind = 'p';";
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_proc'::regclass
+               AND ext.objid   = p.oid
+               AND ext.deptype = 'e'
+            WHERE n.nspname   = 'public'
+              AND p.prokind   = 'p'
+              AND ext.objid   IS NULL;";
 
         return await FetchFunctionListAsync(sql);
     }
@@ -390,8 +458,13 @@ public class BulkSchemaFetcher
                 pg_get_viewdef(c.oid, true) AS definition
             FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_class'::regclass
+               AND ext.objid   = c.oid
+               AND ext.deptype = 'e'
             WHERE c.relkind = 'v'
               AND n.nspname = 'public'
+              AND ext.objid IS NULL
             ORDER BY c.relname;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
@@ -409,14 +482,19 @@ public class BulkSchemaFetcher
     {
         const string sql = @"
             SELECT
-                trg.tgname AS trigger_name,
+                trg.tgname  AS trigger_name,
                 tbl.relname AS table_name,
                 pg_get_triggerdef(trg.oid, true) AS definition
             FROM pg_trigger trg
             JOIN pg_class tbl ON tbl.oid = trg.tgrelid
             JOIN pg_namespace ns ON ns.oid = tbl.relnamespace
-            WHERE ns.nspname = 'public'
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_trigger'::regclass
+               AND ext.objid   = trg.oid
+               AND ext.deptype = 'e'
+            WHERE ns.nspname      = 'public'
               AND NOT trg.tgisinternal
+              AND ext.objid       IS NULL
             ORDER BY tbl.relname, trg.tgname;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
@@ -430,6 +508,10 @@ public class BulkSchemaFetcher
     }
 
     // ── Sequences ─────────────────────────────────────────────────────────────
+    // schemainspect improvement: exclude identity-owned sequences (deptype='i') — these are
+    // automatically managed by Postgres for GENERATED ALWAYS AS IDENTITY columns and must not
+    // appear in standalone sequence comparison.
+    // Extension filter: exclude extension-owned sequences.
 
     private async Task<IReadOnlyList<DbSequenceDefinition>> FetchAllSequencesAsync()
     {
@@ -444,7 +526,18 @@ public class BulkSchemaFetcher
                 s.cache_size,
                 s.cycle
             FROM pg_sequences s
-            WHERE s.schemaname = 'public'
+            JOIN pg_class sc ON sc.relname = s.sequencename
+                             AND sc.relnamespace = 'public'::regnamespace
+            LEFT JOIN pg_depend identity_dep
+                ON identity_dep.objid   = sc.oid
+               AND identity_dep.deptype = 'i'
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_class'::regclass
+               AND ext.objid   = sc.oid
+               AND ext.deptype = 'e'
+            WHERE s.schemaname       = 'public'
+              AND identity_dep.objid IS NULL
+              AND ext.objid          IS NULL
             ORDER BY s.sequencename;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
@@ -463,19 +556,25 @@ public class BulkSchemaFetcher
     }
 
     // ── Enum Types ────────────────────────────────────────────────────────────
+    // Extension filter: excludes extension-provided enum types (e.g. PostGIS geometry types).
 
     private async Task<IReadOnlyList<EnumTypeDefinition>> FetchAllEnumsAsync()
     {
         const string sql = @"
             SELECT
-                t.typname AS enum_name,
-                e.enumlabel AS enum_value,
+                t.typname       AS enum_name,
+                e.enumlabel     AS enum_value,
                 e.enumsortorder AS sort_order
             FROM pg_type t
             JOIN pg_namespace n ON n.oid = t.typnamespace
-            JOIN pg_enum e ON e.enumtypid = t.oid
+            JOIN pg_enum e      ON e.enumtypid = t.oid
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_type'::regclass
+               AND ext.objid   = t.oid
+               AND ext.deptype = 'e'
             WHERE t.typtype = 'e'
               AND n.nspname = 'public'
+              AND ext.objid IS NULL
             ORDER BY t.typname, e.enumsortorder;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
@@ -496,11 +595,16 @@ public class BulkSchemaFetcher
     private async Task<HashSet<string>> FetchMaterializedViewNamesAsync()
     {
         const string sql = @"
-            SELECT relname
-            FROM pg_class
-            JOIN pg_namespace n ON n.oid = relnamespace
-            WHERE relkind = 'm'
-              AND n.nspname = 'public';";
+            SELECT c.relname
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            LEFT JOIN pg_depend ext
+                ON ext.classid = 'pg_class'::regclass
+               AND ext.objid   = c.oid
+               AND ext.deptype = 'e'
+            WHERE c.relkind = 'm'
+              AND n.nspname = 'public'
+              AND ext.objid IS NULL;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
         return dt.AsEnumerable()

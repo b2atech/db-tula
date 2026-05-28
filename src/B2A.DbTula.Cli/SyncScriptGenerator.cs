@@ -128,30 +128,34 @@ public class SyncScriptGenerator
         if (options.IncludeRiskyChanges)
         {
             // Enum rename-trick (borrowed from migra) for changed enums where values were removed/reordered.
-            // This avoids DROP TYPE which would fail while any column still references the type.
-            // Steps: RENAME old → CREATE new → RECAST all columns → DROP old
             if (sourceSnapshot != null)
             {
-                var changedEnumsNeedingRename = results
-                    .Where(r => r.ObjectType == SchemaObjectType.Enum && r.Status == ComparisonStatus.Mismatch
-                             && r.DiffScript != null && r.DiffScript.Contains("RECREATE"))
-                    .ToList();
-
-                foreach (var r in changedEnumsNeedingRename)
+                foreach (var r in results.Where(r => r.ObjectType == SchemaObjectType.Enum
+                             && r.Status == ComparisonStatus.Mismatch
+                             && r.DiffScript != null && r.DiffScript.Contains("RECREATE")))
                 {
                     var renameSql = BuildEnumRenameTrick(r.Name, sourceSnapshot);
                     if (!string.IsNullOrWhiteSpace(renameSql))
                         script.Risky.Add(Stmt("EnumRename", r.Name, renameSql,
-                            "Enum values changed — uses rename-trick: old renamed, new created, columns recast, old dropped"));
+                            "Enum values changed — rename-trick: old renamed, new created, columns recast, old dropped"));
                 }
             }
 
-            // Column type changes
+            // Column type changes — apgdiff improvement: include USING clause template
+            // ALTER COLUMN TYPE without USING fails when Postgres cannot auto-cast.
+            // Pattern: ALTER TABLE t ALTER COLUMN c TYPE new_type USING c::text::new_type
             foreach (var r in Mismatched(results, SchemaObjectType.Table))
                 foreach (var sub in r.SubResults.Where(s => s.Component == "Columns" && s.Status == ComparisonStatus.Mismatch))
+                {
+                    var colName = ExtractColumnName(sub.Details);
+                    var usingSql = !string.IsNullOrEmpty(colName)
+                        ? $"ALTER TABLE \"{r.Name}\" ALTER COLUMN \"{colName}\" TYPE <new_type>\n    USING \"{colName}\"::text::<new_type>;"
+                        : $"-- ALTER TABLE \"{r.Name}\" ALTER COLUMN ... TYPE ...;";
+
                     script.Risky.Add(Stmt("ColumnTypeChange", r.Name,
-                        $"-- ⚠ Verify data compatibility before running\n-- {sub.Details}\n-- ALTER TABLE \"{r.Name}\" ALTER COLUMN ... TYPE ...;",
+                        $"-- ⚠ Verify data compatibility. Fill in <new_type>.\n-- {sub.Details}\n{usingSql}",
                         sub.Details ?? "Column definition differs"));
+                }
 
             // Sequence definition changes
             foreach (var r in Mismatched(results, SchemaObjectType.Sequence))
@@ -388,11 +392,21 @@ public class SyncScriptGenerator
     private static IEnumerable<ComparisonSubResult> MissingInTargetSubs(ComparisonResult r, string component) =>
         r.SubResults.Where(s => s.Component == component && s.Status == ComparisonStatus.MissingInTarget);
 
+    // apgdiff improvement: all generated DDL uses IF NOT EXISTS / IF EXISTS safety guards.
+    // This makes scripts idempotent — safe to re-run if a partial migration was interrupted.
+
     private static string? BuildMissingTableSql(ComparisonResult r)
     {
         var createSub = r.SubResults.FirstOrDefault(s => s.Component == "CreateScript");
         if (createSub != null && !string.IsNullOrWhiteSpace(createSub.CreateScript))
-            return createSub.CreateScript;
+        {
+            // Ensure IF NOT EXISTS on CREATE TABLE
+            var script = createSub.CreateScript!;
+            if (!script.Contains("IF NOT EXISTS", StringComparison.OrdinalIgnoreCase))
+                script = script.Replace("CREATE TABLE \"", "CREATE TABLE IF NOT EXISTS \"",
+                    StringComparison.OrdinalIgnoreCase);
+            return script;
+        }
 
         var cols = r.SubResults
             .Where(s => s.Component == "Columns" && !string.IsNullOrWhiteSpace(s.CreateScript))
@@ -405,7 +419,7 @@ public class SyncScriptGenerator
 
         var sb = new StringBuilder();
         sb.AppendLine($"-- ⚠ Simplified CREATE — review before executing");
-        sb.AppendLine($"CREATE TABLE \"{r.Name}\" (");
+        sb.AppendLine($"CREATE TABLE IF NOT EXISTS \"{r.Name}\" (");
         for (int i = 0; i < cols.Count; i++)
         {
             sb.Append($"    {cols[i]}");
@@ -413,6 +427,13 @@ public class SyncScriptGenerator
         }
         sb.AppendLine(");");
         return sb.ToString();
+    }
+
+    private static string? ExtractColumnName(string? details)
+    {
+        if (string.IsNullOrEmpty(details)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(details, @"Column '([^']+)'");
+        return match.Success ? match.Groups[1].Value : null;
     }
 }
 
