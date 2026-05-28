@@ -1,0 +1,48 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34714.143
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "B2A.DbTula.Core", "src\B2A.DbTula.Core\B2A.DbTula.Core.csproj", "{6FE64A28-2DB9-4A34-9F57-111B73B504D0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "B2A.DbTula.Infrastructure.Postgres", "src\B2A.DbTula.Infrastructure.Postgres\B2A.DbTula.Infrastructure.Postgres.csproj", "{1342DD50-9CA4-4E10-8704-B61D04A8FBBA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "B2A.DbTula.Infrastructure.MySql", "src\B2A.DbTula.Infrastructure.MySql\B2A.DbTula.Infrastructure.MySql.csproj", "{71AD9CE1-38AA-405B-A41A-58085FCF47E6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "B2A.DbTula.Cli", "src\B2A.DbTula.Cli\B2A.DbTula.Cli.csproj", "{E19E2B86-0BD6-4630-B978-7A7376865080}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "B2A.DbTula.Core.Tests", "tests\B2A.DbTula.Core.Tests\B2A.DbTula.Core.Tests.csproj", "{60DDB0CA-9558-414F-8D3E-E5FB744DB0BF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "B2A.DbTula.Integration.Tests", "tests\B2A.DbTula.Integration.Tests\B2A.DbTula.Integration.Tests.csproj", "{5148F91A-B29F-4F54-99FB-BFA5E33F3F28}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6FE64A28-2DB9-4A34-9F57-111B73B504D0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6FE64A28-2DB9-4A34-9F57-111B73B504D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6FE64A28-2DB9-4A34-9F57-111B73B504D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6FE64A28-2DB9-4A34-9F57-111B73B504D0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1342DD50-9CA4-4E10-8704-B61D04A8FBBA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1342DD50-9CA4-4E10-8704-B61D04A8FBBA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1342DD50-9CA4-4E10-8704-B61D04A8FBBA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1342DD50-9CA4-4E10-8704-B61D04A8FBBA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{71AD9CE1-38AA-405B-A41A-58085FCF47E6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{71AD9CE1-38AA-405B-A41A-58085FCF47E6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{71AD9CE1-38AA-405B-A41A-58085FCF47E6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{71AD9CE1-38AA-405B-A41A-58085FCF47E6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E19E2B86-0BD6-4630-B978-7A7376865080}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E19E2B86-0BD6-4630-B978-7A7376865080}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E19E2B86-0BD6-4630-B978-7A7376865080}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E19E2B86-0BD6-4630-B978-7A7376865080}.Release|Any CPU.Build.0 = Release|Any CPU
+		{60DDB0CA-9558-414F-8D3E-E5FB744DB0BF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{60DDB0CA-9558-414F-8D3E-E5FB744DB0BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{60DDB0CA-9558-414F-8D3E-E5FB744DB0BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{60DDB0CA-9558-414F-8D3E-E5FB744DB0BF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5148F91A-B29F-4F54-99FB-BFA5E33F3F28}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5148F91A-B29F-4F54-99FB-BFA5E33F3F28}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5148F91A-B29F-4F54-99FB-BFA5E33F3F28}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5148F91A-B29F-4F54-99FB-BFA5E33F3F28}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
