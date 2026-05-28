@@ -18,21 +18,21 @@
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| 1 | Bug 5: Remove `EnsurePgGetTableDefFunctionExistsAsync` | ⏳ In Progress | `SchemaFetcher.cs` |
-| 2 | Bug 1: Fix index query column order | ⏳ Pending | `SchemaFetcher.GetIndexesAsync` |
-| 3 | Bug 2: Fix materialized view detection | ⏳ Pending | `SchemaComparer.IsMaterializedViewAsync` |
-| 4 | Bug 4: Fix canonicalizer regex | ⏳ Pending | `DefinitionCanonicalizer.cs` |
-| 5 | Bug 6a: Add NumericPrecision/Scale to ColumnDefinition | ⏳ Pending | `ColumnDefinition.cs` + query |
-| 6 | Bug 6b: Add OnDelete/OnUpdate to ForeignKeyDefinition | ⏳ Pending | `ForeignKeyDefinition.cs` + query |
-| 7 | Add DbProviderKind + ProviderKind property | ⏳ Pending | Replace reflection-based type detection |
+| 1 | Bug 5: Remove `EnsurePgGetTableDefFunctionExistsAsync` | ✅ Done | commit `386f565` |
+| 2 | Bug 1: Fix index query column order | ✅ Done | commit `386f565` |
+| 3 | Bug 2: Fix materialized view detection | ✅ Done | commit `386f565` |
+| 4 | Bug 4: Fix canonicalizer regex | ✅ Done | commit `386f565` |
+| 5 | Bug 6a: Add NumericPrecision/Scale to ColumnDefinition | ✅ Done | commit `386f565` |
+| 6 | Bug 6b: Add OnDelete/OnUpdate to ForeignKeyDefinition | ✅ Done | commit `386f565` |
+| 7 | Add DbProviderKind + ProviderKind property | ✅ Done | commit `386f565` |
 
 ## Phase 2 — Performance (Bulk Snapshot)
 
 | # | Task | Status |
 |---|---|---|
-| 8 | Add SchemaSnapshot + IDatabaseSchemaSnapshot to Core | ⏳ Pending |
-| 9 | Implement BulkSchemaFetcher for Postgres | ⏳ Pending |
-| 10 | Refactor SchemaComparer to consume SchemaSnapshot | ⏳ Pending |
+| 8 | Add SchemaSnapshot + IDatabaseSchemaSnapshot to Core | 🔜 Next up |
+| 9 | Implement BulkSchemaFetcher for Postgres | 🔜 Next up |
+| 10 | Refactor SchemaComparer to consume SchemaSnapshot | 🔜 Next up |
 
 ## Phase 3 — Missing Coverage
 
@@ -73,7 +73,8 @@
 
 | Date | Completed | Notes |
 |---|---|---|
-| 2026-05-28 | Architecture review, memory files, task creation | Starting Phase 1 implementation |
+| 2026-05-28 | Architecture review, memory files, task creation | — |
+| 2026-05-28 | **Phase 1 complete** — all 7 tasks (6 bugs + ProviderKind) | commit `386f565`, 0 build errors |
 
 ---
 
