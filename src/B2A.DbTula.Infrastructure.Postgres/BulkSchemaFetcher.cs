@@ -398,6 +398,7 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyList<DbFunctionDefinition>> FetchAllFunctionsAsync()
     {
+        // NOT EXISTS pattern (from schemainspect/pgquarrel) — unambiguous, avoids LEFT JOIN fan-out
         const string sql = @"
             SELECT
                 p.proname AS routine_name,
@@ -405,13 +406,14 @@ public class BulkSchemaFetcher
                 pg_get_functiondef(p.oid) AS definition
             FROM pg_proc p
             JOIN pg_namespace n ON p.pronamespace = n.oid
-            LEFT JOIN pg_depend ext
-                ON ext.classid = 'pg_proc'::regclass
-               AND ext.objid   = p.oid
-               AND ext.deptype = 'e'
-            WHERE n.nspname   = 'public'
-              AND p.prokind   = 'f'
-              AND ext.objid   IS NULL;";
+            WHERE n.nspname = 'public'
+              AND p.prokind = 'f'
+              AND NOT EXISTS (
+                  SELECT 1 FROM pg_depend d
+                  WHERE d.objid   = p.oid
+                    AND d.classid = 'pg_proc'::regclass
+                    AND d.deptype = 'e'
+              );";
 
         return await FetchFunctionListAsync(sql);
     }
@@ -425,13 +427,14 @@ public class BulkSchemaFetcher
                 pg_get_functiondef(p.oid) AS definition
             FROM pg_proc p
             JOIN pg_namespace n ON p.pronamespace = n.oid
-            LEFT JOIN pg_depend ext
-                ON ext.classid = 'pg_proc'::regclass
-               AND ext.objid   = p.oid
-               AND ext.deptype = 'e'
-            WHERE n.nspname   = 'public'
-              AND p.prokind   = 'p'
-              AND ext.objid   IS NULL;";
+            WHERE n.nspname = 'public'
+              AND p.prokind = 'p'
+              AND NOT EXISTS (
+                  SELECT 1 FROM pg_depend d
+                  WHERE d.objid   = p.oid
+                    AND d.classid = 'pg_proc'::regclass
+                    AND d.deptype = 'e'
+              );";
 
         return await FetchFunctionListAsync(sql);
     }

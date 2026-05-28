@@ -108,15 +108,37 @@ public class SchemaComparer : ISchemaComparer
             sourceSnapshot, targetSnapshot);
 
         // ── FUNCTIONS ─────────────────────────────────────────────────────────
-        static string GetSignatureKey(DbFunctionDefinition def) => $"{def.Name}({def.Arguments})";
+        // NormalizeFunctionKey: pg_get_function_identity_arguments uses the current search_path
+        // to decide whether to schema-qualify type names. QA and PROD may have different
+        // search_paths, so "update_invoice(p_status invoice_status)" on QA becomes
+        // "update_invoice(p_status public.invoice_status)" on PROD — different keys, false "missing".
+        // Fix: strip schema qualifiers from argument type names and normalise whitespace.
+        static string NormalizeArgs(string? args)
+        {
+            if (string.IsNullOrWhiteSpace(args)) return "";
+            // Remove schema-qualified prefixes from type names (e.g. public.my_type → my_type)
+            var s = System.Text.RegularExpressions.Regex.Replace(
+                args.Trim(), @"\b\w+\.", "", System.Text.RegularExpressions.RegexOptions.None);
+            return System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ").ToLowerInvariant();
+        }
+        static string GetSignatureKey(DbFunctionDefinition def) =>
+            $"{def.Name?.Trim().ToLowerInvariant()}({NormalizeArgs(def.Arguments)})";
 
         IEnumerable<DbFunctionDefinition> srcFuncList = sourceSnapshot != null
             ? sourceSnapshot.Functions : await sourceProvider.GetFunctionsAsync();
         IEnumerable<DbFunctionDefinition> tgtFuncList = targetSnapshot != null
             ? targetSnapshot.Functions : await targetProvider.GetFunctionsAsync();
 
-        var sourceFunctions = srcFuncList.ToDictionary(GetSignatureKey, StringComparer.OrdinalIgnoreCase);
-        var targetFunctions = tgtFuncList.ToDictionary(GetSignatureKey, StringComparer.OrdinalIgnoreCase);
+        // Deduplicate by key in case the same function appears twice (should not happen but guards ToDictionary crash)
+        var sourceFunctions = srcFuncList
+            .GroupBy(GetSignatureKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var targetFunctions = tgtFuncList
+            .GroupBy(GetSignatureKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        progressLogger?.Invoke(0, 0,
+            $"⚙️ Functions found — source: {sourceFunctions.Count}, target: {targetFunctions.Count}", false);
 
         var limitedSrcFunctions = runForTest
             ? sourceFunctions.Take(testObjectLimit).ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
@@ -134,8 +156,15 @@ public class SchemaComparer : ISchemaComparer
         IEnumerable<DbFunctionDefinition> tgtProcList = targetSnapshot != null
             ? targetSnapshot.Procedures : await targetProvider.GetProceduresAsync();
 
-        var sourceProcedures = srcProcList.ToDictionary(GetSignatureKey, StringComparer.OrdinalIgnoreCase);
-        var targetProcedures = tgtProcList.ToDictionary(GetSignatureKey, StringComparer.OrdinalIgnoreCase);
+        var sourceProcedures = srcProcList
+            .GroupBy(GetSignatureKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var targetProcedures = tgtProcList
+            .GroupBy(GetSignatureKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        progressLogger?.Invoke(0, 0,
+            $"🛠 Procedures found — source: {sourceProcedures.Count}, target: {targetProcedures.Count}", false);
 
         var limitedSrcProcedures = runForTest
             ? sourceProcedures.Take(testObjectLimit).ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
