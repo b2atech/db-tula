@@ -5,6 +5,7 @@ using B2A.DbTula.Core.Models;
 using B2A.DbTula.Core.Utilities;
 using B2A.DbTula.Cli.Services;
 using System.Text;
+using System.Diagnostics;
 
 namespace B2A.DbTula.Cli;
 
@@ -46,166 +47,141 @@ public class SchemaComparer : ISchemaComparer
     {
         options ??= new ComparisonOptions();
         _currentOptions = options;
+        _lastSourceProvider = sourceProvider;
+
+        progressLogger?.Invoke(0, 0, "🔍 Taking schema snapshots...", false);
+        var sw = Stopwatch.StartNew();
+
+        // If both providers support bulk snapshots, fetch both in parallel (the big win)
+        SchemaSnapshot? sourceSnapshot = null;
+        SchemaSnapshot? targetSnapshot = null;
+
+        if (sourceProvider is IDatabaseSchemaSnapshot srcSnap && targetProvider is IDatabaseSchemaSnapshot tgtSnap)
+        {
+            var srcTask = srcSnap.TakeSnapshotAsync();
+            var tgtTask = tgtSnap.TakeSnapshotAsync();
+            await Task.WhenAll(srcTask, tgtTask);
+            sourceSnapshot = srcTask.Result;
+            targetSnapshot = tgtTask.Result;
+            _sourceMatViews = sourceSnapshot.MaterializedViewNames;
+            _targetMatViews = targetSnapshot.MaterializedViewNames;
+            progressLogger?.Invoke(0, 0, $"✅ Snapshots taken in {sw.ElapsedMilliseconds}ms", false);
+        }
+        else
+        {
+            // Fallback: fetch matviews individually (e.g. MySQL provider)
+            var sourceMatViewsTask = sourceProvider.GetMaterializedViewNamesAsync();
+            var targetMatViewsTask = targetProvider.GetMaterializedViewNamesAsync();
+            await Task.WhenAll(sourceMatViewsTask, targetMatViewsTask);
+            _sourceMatViews = sourceMatViewsTask.Result;
+            _targetMatViews = targetMatViewsTask.Result;
+        }
+
         var results = new List<ComparisonResult>();
 
-        progressLogger?.Invoke(0, 0, "🔍 Fetching schema objects...", false);
-
-        // Fetch materialized view names upfront so table comparison can skip PK logic correctly
-        _lastSourceProvider = sourceProvider;
-        var sourceMatViewsTask = sourceProvider.GetMaterializedViewNamesAsync();
-        var targetMatViewsTask = targetProvider.GetMaterializedViewNamesAsync();
-        await Task.WhenAll(sourceMatViewsTask, targetMatViewsTask);
-        _sourceMatViews = sourceMatViewsTask.Result;
-        _targetMatViews = targetMatViewsTask.Result;
-
-        // --- TABLES ---
-        var sourceTables = await sourceProvider.GetTablesAsync();
-        var targetTables = await targetProvider.GetTablesAsync();
+        // ── TABLES ────────────────────────────────────────────────────────────
+        var sourceTables = sourceSnapshot?.TableNames.ToList()
+            ?? (await sourceProvider.GetTablesAsync()).ToList();
+        var targetTables = targetSnapshot?.TableNames.ToList()
+            ?? (await targetProvider.GetTablesAsync()).ToList();
 
         var limitedSourceTables = runForTest ? sourceTables.Take(testObjectLimit).ToList() : sourceTables;
         var limitedTargetTables = runForTest
             ? targetTables.Where(t => limitedSourceTables.Contains(t, StringComparer.OrdinalIgnoreCase)).ToList()
             : targetTables;
 
-        progressLogger?.Invoke(0, 0, $"📄 {(runForTest ? $"Test mode: comparing top {testObjectLimit} tables..." : "Comparing tables...")}", false);
+        progressLogger?.Invoke(0, 0, $"📄 Comparing {limitedSourceTables.Count} tables...", false);
 
         await CompareTablesAsync(
-            sourceProvider,
-            targetProvider,
-            limitedSourceTables,
-            limitedTargetTables,
-            results,
-            progressLogger,
-            options);
+            sourceProvider, targetProvider,
+            limitedSourceTables, limitedTargetTables,
+            results, progressLogger, options,
+            sourceSnapshot, targetSnapshot);
 
-        // --- FUNCTIONS ---
-        string GetSignatureKey(DbFunctionDefinition def) =>
-            $"{def.Name}({def.Arguments})";
+        // ── FUNCTIONS ─────────────────────────────────────────────────────────
+        static string GetSignatureKey(DbFunctionDefinition def) => $"{def.Name}({def.Arguments})";
 
-        var sourceFunctions = await sourceProvider.GetFunctionsAsync();
-        var targetFunctions = await targetProvider.GetFunctionsAsync();
-        var sourceFunctionMap = sourceFunctions.ToDictionary(f => GetSignatureKey(f), StringComparer.OrdinalIgnoreCase);
-        var targetFunctionMap = targetFunctions.ToDictionary(f => GetSignatureKey(f), StringComparer.OrdinalIgnoreCase);
+        IEnumerable<DbFunctionDefinition> srcFuncList = sourceSnapshot != null
+            ? sourceSnapshot.Functions : await sourceProvider.GetFunctionsAsync();
+        IEnumerable<DbFunctionDefinition> tgtFuncList = targetSnapshot != null
+            ? targetSnapshot.Functions : await targetProvider.GetFunctionsAsync();
 
-        var limitedSourceFunctions = runForTest
-            ? sourceFunctionMap.Take(testObjectLimit).ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
-            : sourceFunctionMap;
+        var sourceFunctions = srcFuncList.ToDictionary(GetSignatureKey, StringComparer.OrdinalIgnoreCase);
+        var targetFunctions = tgtFuncList.ToDictionary(GetSignatureKey, StringComparer.OrdinalIgnoreCase);
 
-        var limitedTargetFunctionMap = targetFunctionMap
-            .Where(kvp => limitedSourceFunctions.ContainsKey(kvp.Key))
+        var limitedSrcFunctions = runForTest
+            ? sourceFunctions.Take(testObjectLimit).ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
+            : sourceFunctions;
+        var limitedTgtFunctions = targetFunctions
+            .Where(kvp => limitedSrcFunctions.ContainsKey(kvp.Key))
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
-        progressLogger?.Invoke(0, 0, $"⚙️ {(runForTest ? $"Test mode: comparing top {testObjectLimit} functions..." : "Comparing functions...")}", false);
+        progressLogger?.Invoke(0, 0, $"⚙️ Comparing {limitedSrcFunctions.Count} functions...", false);
+        await CompareFunctionsAsync(sourceProvider, targetProvider, limitedSrcFunctions, limitedTgtFunctions, results, progressLogger, options);
 
-        await CompareFunctionsAsync(
-           sourceProvider,
-           targetProvider,
-           limitedSourceFunctions,
-           limitedTargetFunctionMap,
-           results,
-           progressLogger,
-           options);
+        // ── PROCEDURES ────────────────────────────────────────────────────────
+        IEnumerable<DbFunctionDefinition> srcProcList = sourceSnapshot != null
+            ? sourceSnapshot.Procedures : await sourceProvider.GetProceduresAsync();
+        IEnumerable<DbFunctionDefinition> tgtProcList = targetSnapshot != null
+            ? targetSnapshot.Procedures : await targetProvider.GetProceduresAsync();
 
-        // --- PROCEDURES ---
-        var sourceProcedures = await sourceProvider.GetProceduresAsync();
-        var targetProcedures = await targetProvider.GetProceduresAsync();
+        var sourceProcedures = srcProcList.ToDictionary(GetSignatureKey, StringComparer.OrdinalIgnoreCase);
+        var targetProcedures = tgtProcList.ToDictionary(GetSignatureKey, StringComparer.OrdinalIgnoreCase);
 
-        var sourceProcedureMap = sourceProcedures.ToDictionary(p => GetSignatureKey(p), StringComparer.OrdinalIgnoreCase);
-        var targetProcedureMap = targetProcedures.ToDictionary(p => GetSignatureKey(p), StringComparer.OrdinalIgnoreCase);
-
-        var limitedSourceProcedureMap = runForTest
-            ? sourceProcedureMap.Take(testObjectLimit).ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
-            : sourceProcedureMap;
-
-        var limitedTargetProcedureMap = targetProcedureMap
-            .Where(kvp => limitedSourceProcedureMap.ContainsKey(kvp.Key))
+        var limitedSrcProcedures = runForTest
+            ? sourceProcedures.Take(testObjectLimit).ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
+            : sourceProcedures;
+        var limitedTgtProcedures = targetProcedures
+            .Where(kvp => limitedSrcProcedures.ContainsKey(kvp.Key))
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
-        progressLogger?.Invoke(0, 0, $"🛠 {(runForTest ? $"Test mode: comparing top {testObjectLimit} procedures..." : "Comparing procedures...")}", false);
+        progressLogger?.Invoke(0, 0, $"🛠 Comparing {limitedSrcProcedures.Count} procedures...", false);
+        await CompareProceduresAsync(sourceProvider, targetProvider, limitedSrcProcedures, limitedTgtProcedures, results, progressLogger, options);
 
-        await CompareProceduresAsync(
-            sourceProvider,
-            targetProvider,
-            limitedSourceProcedureMap,
-            limitedTargetProcedureMap,
-            results,
-            progressLogger,
-            options);
+        // ── VIEWS ─────────────────────────────────────────────────────────────
+        IEnumerable<DbViewDefinition> srcViewList = sourceSnapshot != null
+            ? sourceSnapshot.Views : await sourceProvider.GetViewsAsync();
+        IEnumerable<DbViewDefinition> tgtViewList = targetSnapshot != null
+            ? targetSnapshot.Views : await targetProvider.GetViewsAsync();
 
-        // --- VIEWS ---
-        var sourceViews = await sourceProvider.GetViewsAsync();
-        var targetViews = await targetProvider.GetViewsAsync();
-        var sourceViewMap = sourceViews.ToDictionary(v => v.Name, StringComparer.OrdinalIgnoreCase);
-        var targetViewMap = targetViews.ToDictionary(v => v.Name, StringComparer.OrdinalIgnoreCase);
+        var sourceViews = srcViewList.ToDictionary(v => v.Name!, StringComparer.OrdinalIgnoreCase);
+        var targetViews = tgtViewList.ToDictionary(v => v.Name!, StringComparer.OrdinalIgnoreCase);
 
-        var limitedSourceViewMap = runForTest
-            ? sourceViewMap.Take(testObjectLimit).ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
-            : sourceViewMap;
-
-        var limitedTargetViewMap = targetViewMap
-            .Where(kvp => limitedSourceViewMap.ContainsKey(kvp.Key))
+        var limitedSrcViews = runForTest
+            ? sourceViews.Take(testObjectLimit).ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
+            : sourceViews;
+        var limitedTgtViews = targetViews
+            .Where(kvp => limitedSrcViews.ContainsKey(kvp.Key))
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
-        progressLogger?.Invoke(0, 0, $"🔍 {(runForTest ? $"Test mode: comparing top {testObjectLimit} views..." : "Comparing views...")}", false);
+        progressLogger?.Invoke(0, 0, $"🔍 Comparing {limitedSrcViews.Count} views...", false);
+        await CompareViewsAsync(sourceProvider, targetProvider, limitedSrcViews, limitedTgtViews, results, progressLogger, options);
 
-        await CompareViewsAsync(
-            sourceProvider,
-            targetProvider,
-            limitedSourceViewMap,
-            limitedTargetViewMap,
-            results,
-            progressLogger,
-            options);
+        // ── TRIGGERS ──────────────────────────────────────────────────────────
+        Func<DbTriggerDefinition, string> triggerKey = t => $"{t.Table}|{t.Name}";
+        IEnumerable<DbTriggerDefinition> srcTrigList = sourceSnapshot != null
+            ? sourceSnapshot.Triggers : await sourceProvider.GetTriggersAsync();
+        IEnumerable<DbTriggerDefinition> tgtTrigList = targetSnapshot != null
+            ? targetSnapshot.Triggers : await targetProvider.GetTriggersAsync();
 
-        // --- TRIGGERS ---
-        var sourceTriggers = await sourceProvider.GetTriggersAsync();
-        var targetTriggers = await targetProvider.GetTriggersAsync();
-        Func<DbTriggerDefinition, string> triggerKeySelector = t => $"{t.Table}|{t.Name}";
-        var sourceTriggerMap = sourceTriggers.ToDictionary(triggerKeySelector, StringComparer.OrdinalIgnoreCase);
-        var targetTriggerMap = targetTriggers.ToDictionary(triggerKeySelector, StringComparer.OrdinalIgnoreCase);
+        var sourceTriggers = srcTrigList.ToDictionary(triggerKey, StringComparer.OrdinalIgnoreCase);
+        var targetTriggers = tgtTrigList.ToDictionary(triggerKey, StringComparer.OrdinalIgnoreCase);
 
-        var limitedSourceTriggerMap = runForTest
-            ? sourceTriggerMap.Take(testObjectLimit).ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
-            : sourceTriggerMap;
-
-        var limitedTargetTriggerMap = targetTriggerMap
-            .Where(kvp => limitedSourceTriggerMap.ContainsKey(kvp.Key))
+        var limitedSrcTriggers = runForTest
+            ? sourceTriggers.Take(testObjectLimit).ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
+            : sourceTriggers;
+        var limitedTgtTriggers = targetTriggers
+            .Where(kvp => limitedSrcTriggers.ContainsKey(kvp.Key))
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
-        progressLogger?.Invoke(0, 0, $"⏰ {(runForTest ? $"Test mode: comparing top {testObjectLimit} triggers..." : "Comparing triggers...")}", false);
+        progressLogger?.Invoke(0, 0, $"⏰ Comparing {limitedSrcTriggers.Count} triggers...", false);
+        await CompareTriggersAsync(sourceProvider, targetProvider, limitedSrcTriggers, limitedTgtTriggers, results, progressLogger, options);
 
-        await CompareTriggersAsync(
-            sourceProvider,
-            targetProvider,
-            limitedSourceTriggerMap,
-            limitedTargetTriggerMap,
-            results,
-            progressLogger,
-            options);
-
-        // --- SEQUENCES ---
-        var sourceSequences = await sourceProvider.GetSequencesAsync();
-        var targetSequences = await targetProvider.GetSequencesAsync();
-        var targetSequenceSet = new HashSet<string>(targetSequences, StringComparer.OrdinalIgnoreCase);
-        var sourceSequenceSet = new HashSet<string>(sourceSequences, StringComparer.OrdinalIgnoreCase);
-
+        // ── SEQUENCES ─────────────────────────────────────────────────────────
         progressLogger?.Invoke(0, 0, "🔢 Comparing sequences...", false);
+        CompareSequences(sourceSnapshot?.Sequences, targetSnapshot?.Sequences, results);
 
-        foreach (var seq in sourceSequences)
-        {
-            if (!targetSequenceSet.Contains(seq))
-            {
-                var def = await sourceProvider.GetSequenceDefinitionAsync(seq);
-                results.Add(CreateResult(seq, SchemaObjectType.Sequence, ComparisonStatus.MissingInTarget, def ?? ""));
-            }
-        }
-
-        foreach (var seq in targetSequences.Where(s => !sourceSequenceSet.Contains(s)))
-        {
-            results.Add(CreateResult(seq, SchemaObjectType.Sequence, ComparisonStatus.MissingInSource, ""));
-        }
-
-        progressLogger?.Invoke(0, 0, "✅ Schema comparison completed.", false);
+        progressLogger?.Invoke(0, 0, $"✅ Schema comparison completed in {sw.ElapsedMilliseconds}ms.", false);
         return results;
     }
 
@@ -218,11 +194,13 @@ public class SchemaComparer : ISchemaComparer
         IList<string> targetTables,
         List<ComparisonResult> results,
         Action<int, int, string, bool>? progressLogger,
-        ComparisonOptions options)
+        ComparisonOptions options,
+        SchemaSnapshot? sourceSnapshot = null,
+        SchemaSnapshot? targetSnapshot = null)
     {
         var sourceDbKind = GetDbKind(sourceProvider);
         var targetDbKind = GetDbKind(targetProvider);
-        
+
         int total = sourceTables.Count;
         var targetTableSet = new HashSet<string>(targetTables, StringComparer.OrdinalIgnoreCase);
 
@@ -231,9 +209,15 @@ public class SchemaComparer : ISchemaComparer
             var tableName = sourceTables[i];
             progressLogger?.Invoke(i + 1, total, $"🔄 Comparing table: {tableName}", true);
 
-            var source = await sourceProvider.GetTableDefinitionAsync(tableName);
+            // Use snapshot if available (pure in-memory lookup), else fall back to per-table provider call
+            var source = sourceSnapshot != null
+                ? sourceSnapshot.GetTableDefinition(tableName)
+                : await sourceProvider.GetTableDefinitionAsync(tableName);
+
             var target = targetTableSet.Contains(tableName)
-                ? await targetProvider.GetTableDefinitionAsync(tableName)
+                ? (targetSnapshot != null
+                    ? targetSnapshot.GetTableDefinition(tableName)
+                    : await targetProvider.GetTableDefinitionAsync(tableName))
                 : null;
 
             if (target == null)
@@ -267,6 +251,7 @@ public class SchemaComparer : ISchemaComparer
             overallStatus |= await CompareForeignKeysAsync(sourceProvider, targetProvider, source, target, subResults);
             overallStatus |= await CompareIndexesAsync(sourceProvider, targetProvider, source, target, subResults);
             overallStatus |= await CompareConstraintsAsync(sourceProvider, targetProvider, source, target, subResults);
+            overallStatus |= CompareCheckConstraints(sourceSnapshot, targetSnapshot, source.Name, target.Name, subResults);
 
             var diffScript = BuildDiffScript(source, target, subResults, overallStatus);
 
@@ -288,7 +273,7 @@ public class SchemaComparer : ISchemaComparer
         var sourceTableSet = new HashSet<string>(sourceTables, StringComparer.OrdinalIgnoreCase);
         foreach (var targetTable in targetTables.Where(t => !sourceTableSet.Contains(t)))
         {
-            var result = await HandleTableMissingInSourceAsync(targetProvider, targetTable);
+            var result = await HandleTableMissingInSourceAsync(targetProvider, targetTable, targetSnapshot);
             results.Add(result);
         }
     }
@@ -540,6 +525,94 @@ public class SchemaComparer : ISchemaComparer
         return status;
     }
 
+    private static ComparisonStatus CompareCheckConstraints(
+        SchemaSnapshot? sourceSnapshot,
+        SchemaSnapshot? targetSnapshot,
+        string sourceTableName,
+        string targetTableName,
+        List<ComparisonSubResult> subResults)
+    {
+        if (sourceSnapshot == null || targetSnapshot == null)
+            return ComparisonStatus.Match; // only available via snapshot path
+
+        var sourceChecks = sourceSnapshot.CheckConstraintsByTable
+            .GetValueOrDefault(sourceTableName) ?? [];
+        var targetChecks = targetSnapshot.CheckConstraintsByTable
+            .GetValueOrDefault(targetTableName) ?? [];
+
+        var srcByKey = sourceChecks.ToDictionary(c => c.GetStructuralKey(), StringComparer.OrdinalIgnoreCase);
+        var tgtByKey = targetChecks.ToDictionary(c => c.GetStructuralKey(), StringComparer.OrdinalIgnoreCase);
+        var allKeys = srcByKey.Keys.Union(tgtByKey.Keys, StringComparer.OrdinalIgnoreCase);
+
+        var status = ComparisonStatus.Match;
+        foreach (var key in allKeys)
+        {
+            var inSrc = srcByKey.TryGetValue(key, out var srcCheck);
+            var inTgt = tgtByKey.TryGetValue(key, out _);
+
+            if (inSrc && !inTgt)
+            {
+                subResults.Add(new("CheckConstraints", ComparisonStatus.MissingInTarget,
+                    $"Check constraint ({srcCheck!.Name}): {key} missing in target",
+                    $"ALTER TABLE \"{sourceTableName}\" ADD CONSTRAINT \"{srcCheck.Name}\" {srcCheck.CheckClause};"));
+                status = ComparisonStatus.Mismatch;
+            }
+            else if (!inSrc && inTgt)
+            {
+                subResults.Add(new("CheckConstraints", ComparisonStatus.MissingInSource,
+                    $"Check constraint ({key}) missing in source", string.Empty));
+                status = ComparisonStatus.Mismatch;
+            }
+        }
+        return status;
+    }
+
+    private static void CompareSequences(
+        IReadOnlyList<DbSequenceDefinition>? sourceSeqs,
+        IReadOnlyList<DbSequenceDefinition>? targetSeqs,
+        List<ComparisonResult> results)
+    {
+        if (sourceSeqs == null || targetSeqs == null) return;
+
+        var srcByName = sourceSeqs.ToDictionary(s => s.Name, StringComparer.OrdinalIgnoreCase);
+        var tgtByName = targetSeqs.ToDictionary(s => s.Name, StringComparer.OrdinalIgnoreCase);
+        var allNames  = srcByName.Keys.Union(tgtByName.Keys, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in allNames)
+        {
+            var inSrc = srcByName.TryGetValue(name, out var src);
+            var inTgt = tgtByName.TryGetValue(name, out var tgt);
+
+            if (inSrc && !inTgt)
+            {
+                results.Add(CreateSequenceResult(name, ComparisonStatus.MissingInTarget,
+                    $"CREATE SEQUENCE \"{name}\" INCREMENT BY {src!.IncrementBy} MINVALUE {src.MinValue} MAXVALUE {src.MaxValue} CACHE {src.CacheSize}{(src.Cycle ? " CYCLE" : "")};"));
+            }
+            else if (!inSrc && inTgt)
+            {
+                results.Add(CreateSequenceResult(name, ComparisonStatus.MissingInSource, string.Empty));
+            }
+            else if (inSrc && inTgt && !src!.StructuralEquals(tgt!))
+            {
+                var details = $"Sequence differs — source: inc={src.IncrementBy} min={src.MinValue} max={src.MaxValue} cache={src.CacheSize} cycle={src.Cycle} | target: inc={tgt!.IncrementBy} min={tgt.MinValue} max={tgt.MaxValue} cache={tgt.CacheSize} cycle={tgt.Cycle}";
+                results.Add(CreateSequenceResult(name, ComparisonStatus.Mismatch, details));
+            }
+            else
+            {
+                results.Add(CreateSequenceResult(name, ComparisonStatus.Match, string.Empty));
+            }
+        }
+    }
+
+    private static ComparisonResult CreateSequenceResult(string name, ComparisonStatus status, string detail) => new()
+    {
+        ObjectType = SchemaObjectType.Sequence,
+        Name       = name,
+        Status     = status,
+        Details    = detail,
+        DiffScript = status != ComparisonStatus.Match ? detail : null,
+    };
+
     private string? BuildDiffScript(TableDefinition source, TableDefinition target, List<ComparisonSubResult> subResults, ComparisonStatus status)
     {
         if (status == ComparisonStatus.Match) return null;
@@ -579,9 +652,12 @@ public class SchemaComparer : ISchemaComparer
         }
     }
 
-    private async Task<ComparisonResult> HandleTableMissingInSourceAsync(IDatabaseSchemaProvider provider, string tableName)
+    private async Task<ComparisonResult> HandleTableMissingInSourceAsync(
+        IDatabaseSchemaProvider provider, string tableName, SchemaSnapshot? snapshot = null)
     {
-        var table = await provider.GetTableDefinitionAsync(tableName);
+        var table = snapshot != null
+            ? snapshot.GetTableDefinition(tableName)
+            : await provider.GetTableDefinitionAsync(tableName);
         var subResults = new List<ComparisonSubResult>();
 
         if (!string.IsNullOrWhiteSpace(table.CreateScript))

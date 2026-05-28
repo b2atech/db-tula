@@ -1,4 +1,5 @@
 using B2a.DbTula.Core.Abstractions;
+using B2A.DbTula.Core.Abstractions;
 using B2A.DbTula.Core.Enums;
 using B2A.DbTula.Core.Models;
 using B2A.DbTula.Infrastructure.Postgres;
@@ -7,11 +8,12 @@ using System.Data;
 namespace B2a.DbTula.Infrastructure.Postgres;
 
 
-public class PostgresSchemaProvider : IDatabaseSchemaProvider
+public class PostgresSchemaProvider : IDatabaseSchemaProvider, IDatabaseSchemaSnapshot
 {
     public DbProviderKind ProviderKind => DbProviderKind.Postgres;
 
     private readonly SchemaFetcher _fetcher;
+    private readonly BulkSchemaFetcher _bulkFetcher;
     private readonly DatabaseConnection _connection;
     public PostgresSchemaProvider(
         string connectionString,
@@ -21,6 +23,7 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
     {
         _connection = new DatabaseConnection(connectionString, logger, verbose, logLevel);
         _fetcher = new SchemaFetcher(_connection, logger, verbose, logLevel);
+        _bulkFetcher = new BulkSchemaFetcher(_connection);
     }
 
 
@@ -157,6 +160,9 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
     {
         return await _fetcher.GetMaterializedViewNamesAsync();
     }
+
+    public Task<SchemaSnapshot> TakeSnapshotAsync(CancellationToken ct = default)
+        => _bulkFetcher.TakeSnapshotAsync(ct);
 
     public async Task<IList<DbViewDefinition>> GetViewsAsync()
     {
