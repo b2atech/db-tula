@@ -50,6 +50,18 @@ public class ColumnDefinition
     public bool IsIdentity { get; set; } = false;
 
     /// <summary>
+    /// The underlying type name from pg_catalog (udt_name).
+    /// For enum columns, DataType = "USER-DEFINED" and UdtName = the enum type name.
+    /// For built-in types, UdtName = the internal name (e.g. "int4", "varchar").
+    /// </summary>
+    public string? UdtName { get; set; }
+
+    /// <summary>
+    /// True when this column's type is a user-defined enum (DataType == "USER-DEFINED").
+    /// </summary>
+    public bool IsEnum => string.Equals(DataType, "USER-DEFINED", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Optional: Script to add this column (ALTER TABLE ... ADD COLUMN ...)
     /// </summary>
     public string? CreateScript { get; set; }

@@ -119,6 +119,7 @@ public class BulkSchemaFetcher
                 {
                     Name              = r["column_name"].ToString() ?? string.Empty,
                     DataType          = r["data_type"].ToString() ?? string.Empty,
+                    UdtName           = r["udt_name"].ToString(),
                     IsNullable        = r["is_nullable"].ToString() == "YES",
                     Length            = r["character_maximum_length"] != DBNull.Value ? Convert.ToInt32(r["character_maximum_length"]) : null,
                     NumericPrecision  = r["numeric_precision"] != DBNull.Value ? Convert.ToInt32(r["numeric_precision"]) : null,

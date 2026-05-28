@@ -34,6 +34,13 @@ public class SchemaComparer : ISchemaComparer
     private HashSet<string> _targetMatViews = new(StringComparer.OrdinalIgnoreCase);
     private IDatabaseSchemaProvider? _lastSourceProvider;
 
+    /// <summary>
+    /// The source snapshot from the most recent CompareAsync call.
+    /// Available after comparison for use by SyncScriptGenerator (enum rename-trick needs column info).
+    /// </summary>
+    public SchemaSnapshot? LastSourceSnapshot { get; private set; }
+    public SchemaSnapshot? LastTargetSnapshot { get; private set; }
+
     public SchemaComparer()
     {
         _sqlDiffService = new SqlDiffService();
@@ -65,6 +72,8 @@ public class SchemaComparer : ISchemaComparer
             targetSnapshot = tgtTask.Result;
             _sourceMatViews = sourceSnapshot.MaterializedViewNames;
             _targetMatViews = targetSnapshot.MaterializedViewNames;
+            LastSourceSnapshot = sourceSnapshot;
+            LastTargetSnapshot = targetSnapshot;
             progressLogger?.Invoke(0, 0, $"✅ Snapshots taken in {sw.ElapsedMilliseconds}ms", false);
         }
         else

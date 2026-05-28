@@ -122,6 +122,7 @@ public class SchemaFetcher
         SELECT
             column_name,
             data_type,
+            udt_name,
             character_maximum_length,
             numeric_precision,
             numeric_scale,
@@ -155,6 +156,7 @@ public class SchemaFetcher
             {
                 Name = row["column_name"].ToString() ?? string.Empty,
                 DataType = row["data_type"].ToString() ?? string.Empty,
+                UdtName = row.Table.Columns.Contains("udt_name") ? row["udt_name"]?.ToString() : null,
                 IsNullable = row["is_nullable"].ToString() == "YES",
                 Length = row["character_maximum_length"] != DBNull.Value
                          ? Convert.ToInt32(row["character_maximum_length"]) : null,

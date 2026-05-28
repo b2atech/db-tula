@@ -132,8 +132,9 @@ internal class Program
                     IncludeRiskyChanges = argsParsed.AllowRisky,
                     AllowDestructive  = argsParsed.AllowDestructive,
                 };
-                var syncScript = new SyncScriptGenerator().Generate(resultList, syncOptions);
-                var syncText   = new SyncScriptGenerator().Render(syncScript, syncOptions);
+                var gen        = new SyncScriptGenerator();
+                var syncScript = gen.Generate(resultList, syncOptions, comparer.LastSourceSnapshot);
+                var syncText   = gen.Render(syncScript, syncOptions);
                 await File.WriteAllTextAsync(argsParsed.SyncOutputFile, syncText);
                 Log.Logger.Information("✅ Sync script written to: {SyncFile} ({Safe} safe, {Risky} risky, {Destructive} destructive statements)",
                     argsParsed.SyncOutputFile, syncScript.Safe.Count, syncScript.Risky.Count, syncScript.Destructive.Count);
