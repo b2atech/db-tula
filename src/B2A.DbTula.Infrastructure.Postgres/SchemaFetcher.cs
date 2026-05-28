@@ -9,7 +9,6 @@ public class SchemaFetcher
     private readonly DatabaseConnection _connection;
     private readonly Action<int, int, string, bool> _logger;
     private readonly LogLevel _logLevel;
-    private bool _pgGetTableDefEnsured;
 
     public SchemaFetcher(DatabaseConnection connection, Action<int, int, string, bool> logger, object verbose, LogLevel logLevel = LogLevel.Basic)
     {
@@ -98,20 +97,13 @@ public class SchemaFetcher
     #region Get Details of a specific table
     public async Task<TableDefinition> GetTableDefinitionAsync(string tableName)
     {
-        if (!_pgGetTableDefEnsured)
-        {
-            await EnsurePgGetTableDefFunctionExistsAsync();
-            _pgGetTableDefEnsured = true;
-        }
-
         var columnsTask = GetColumnsListAsync(tableName);
         var pkTask = GetPrimaryKeysListAsync(tableName);
         var fkTask = GetForeignKeysListAsync(tableName);
         var indexTask = GetIndexesListAsync(tableName);
         var uniqueTask = GetUniqueConstraintsListAsync(tableName);
-        var scriptTask = GetCreateTableScriptAsync(tableName);
 
-        await Task.WhenAll(columnsTask, pkTask, fkTask, indexTask, uniqueTask, scriptTask);
+        await Task.WhenAll(columnsTask, pkTask, fkTask, indexTask, uniqueTask);
 
         return new TableDefinition
         {
@@ -121,7 +113,6 @@ public class SchemaFetcher
             ForeignKeys = fkTask.Result,
             Indexes = indexTask.Result,
             UniqueConstraints = uniqueTask.Result,
-            CreateScript = scriptTask.Result
         };
     }
 
@@ -132,22 +123,23 @@ public class SchemaFetcher
             column_name,
             data_type,
             character_maximum_length,
+            numeric_precision,
+            numeric_scale,
+            datetime_precision,
             is_nullable,
-            column_default
-        FROM
-            information_schema.columns
-        WHERE
-            table_name = @tableName
-            AND table_schema = 'public'
+            column_default,
+            is_generated,
+            identity_generation
+        FROM information_schema.columns
+        WHERE table_name = @tableName
+          AND table_schema = 'public'
         ORDER BY ordinal_position";
 
         var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
         var result = await ExecuteQueryAsync(query, parameters);
 
         if (result.Columns.Contains("column_name"))
-        {
-            result.PrimaryKey = new DataColumn[] { result.Columns["column_name"] };
-        }
+            result.PrimaryKey = [result.Columns["column_name"]!];
 
         return result;
     }
@@ -165,11 +157,18 @@ public class SchemaFetcher
                 DataType = row["data_type"].ToString() ?? string.Empty,
                 IsNullable = row["is_nullable"].ToString() == "YES",
                 Length = row["character_maximum_length"] != DBNull.Value
-                         ? Convert.ToInt32(row["character_maximum_length"])
-                         : null,
-                DefaultValue = row.Table.Columns.Contains("column_default") && row["column_default"] != DBNull.Value
-                               ? row["column_default"].ToString()
-                               : null
+                         ? Convert.ToInt32(row["character_maximum_length"]) : null,
+                NumericPrecision = row["numeric_precision"] != DBNull.Value
+                         ? Convert.ToInt32(row["numeric_precision"]) : null,
+                NumericScale = row["numeric_scale"] != DBNull.Value
+                         ? Convert.ToInt32(row["numeric_scale"]) : null,
+                DateTimePrecision = row["datetime_precision"] != DBNull.Value
+                         ? Convert.ToInt32(row["datetime_precision"]) : null,
+                DefaultValue = row["column_default"] != DBNull.Value
+                               ? row["column_default"].ToString() : null,
+                IsIdentity = row["identity_generation"] != DBNull.Value
+                             && !string.IsNullOrEmpty(row["identity_generation"].ToString()),
+                IsComputed = row["is_generated"].ToString() == "ALWAYS",
             });
         }
 
@@ -198,38 +197,27 @@ public class SchemaFetcher
 
     public async Task<List<ForeignKeyDefinition>> GetForeignKeysListAsync(string tableName)
     {
-        var foreignKeyList = new List<ForeignKeyDefinition>();
         var foreignKeyDataTable = await GetForeignKeysAsync(tableName);
 
-        foreach (DataRow row in foreignKeyDataTable.Rows)
-        {
-            var newFk = new ForeignKeyDefinition
+        // Group by constraint name to collapse multi-column FKs (each column is one row)
+        return foreignKeyDataTable.AsEnumerable()
+            .GroupBy(row => row["foreign_key_name"].ToString() ?? string.Empty)
+            .Select(g =>
             {
-                Name = row["foreign_key_name"].ToString(),
-                ColumnName = row["column_name"].ToString(),
-                ReferencedTable = row["foreign_table_name"].ToString(),
-                ReferencedColumn = row["foreign_column_name"].ToString()
-            };
-
-            if (!foreignKeyList.Any(fk =>
-                fk.ColumnName == newFk.ColumnName &&
-                fk.ReferencedTable == newFk.ReferencedTable &&
-                fk.ReferencedColumn == newFk.ReferencedColumn))
-            {
-                foreignKeyList.Add(newFk);
-            }
-        }
-
-        return foreignKeyList;
+                var first = g.First();
+                return new ForeignKeyDefinition
+                {
+                    Name = g.Key,
+                    ColumnName = string.Join(",", g.Select(r => r["column_name"].ToString())),
+                    ReferencedTable = first["foreign_table_name"].ToString() ?? string.Empty,
+                    ReferencedColumn = string.Join(",", g.Select(r => r["foreign_column_name"].ToString())),
+                    OnUpdate = first["on_update"].ToString() ?? "NO ACTION",
+                    OnDelete = first["on_delete"].ToString() ?? "NO ACTION",
+                };
+            })
+            .ToList();
     }
 
-    public async Task<string?> GetCreateTableScriptAsync(string tableName)
-    {
-        const string query = "SELECT pg_get_tabledef(@tableName)";
-        var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
-        var result = await _connection.ExecuteQueryAsync(query, parameters);
-        return result.Rows.Count > 0 ? result.Rows[0][0].ToString() : null;
-    }
 
     public async Task<List<IndexDefinition>> GetIndexesListAsync(string tableName)
     {
@@ -243,10 +231,11 @@ public class SchemaFetcher
                 return new IndexDefinition
                 {
                     Name = group.Key ?? string.Empty,
+                    // Rows are already ordered by cols.ord from the query — column order is preserved
                     Columns = group.Select(r => r["columnname"].ToString() ?? string.Empty).ToList(),
                     IsUnique = firstRow["is_unique"] != DBNull.Value && (bool)firstRow["is_unique"],
                     IndexType = firstRow["index_type"]?.ToString() ?? string.Empty,
-                    //CreateScript = firstRow["create_script"]?.ToString() ?? string.Empty
+                    Predicate = firstRow["predicate"] != DBNull.Value ? firstRow["predicate"]?.ToString() : null,
                 };
             });
 
@@ -261,20 +250,22 @@ public class SchemaFetcher
                 t.relname AS tablename,
                 a.attname AS columnname,
                 ix.indisunique AS is_unique,
-                am.amname AS index_type
-            FROM
-                pg_class t
-                JOIN pg_index ix ON t.oid = ix.indrelid
-                JOIN pg_class i ON i.oid = ix.indexrelid
-                JOIN pg_am am ON i.relam = am.oid
-                JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
-                JOIN pg_namespace ns ON ns.oid = t.relnamespace
-            WHERE
-                t.relname = @tableName
-                AND ns.nspname = 'public'
-                AND a.attnum > 0
-            ORDER BY
-                i.relname, a.attnum;";
+                ix.indisvalid AS is_valid,
+                am.amname AS index_type,
+                pg_get_expr(ix.indpred, ix.indrelid, true) AS predicate
+            FROM pg_class t
+            JOIN pg_index ix ON t.oid = ix.indrelid
+            JOIN pg_class i ON i.oid = ix.indexrelid
+            JOIN pg_am am ON i.relam = am.oid
+            JOIN pg_namespace ns ON ns.oid = t.relnamespace
+            CROSS JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY AS cols(attnum, ord)
+            JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = cols.attnum
+            WHERE t.relname = @tableName
+              AND ns.nspname = 'public'
+              AND ix.indisvalid = true
+              AND ix.indisprimary = false
+              AND a.attnum > 0
+            ORDER BY i.relname, cols.ord;";
 
         var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
         return await ExecuteQueryAsync(query, parameters);
@@ -357,24 +348,32 @@ public class SchemaFetcher
     {
         const string query = @"
             SELECT
-                tc.constraint_name AS foreign_key_name,
-                kcu.column_name,
-                ccu.table_name AS foreign_table_name,
-                ccu.column_name AS foreign_column_name
-            FROM information_schema.table_constraints AS tc
-            JOIN information_schema.key_column_usage AS kcu
-                ON tc.constraint_name = kcu.constraint_name
-                AND tc.table_schema = kcu.table_schema
-                AND tc.table_name = kcu.table_name
-            JOIN information_schema.constraint_column_usage AS ccu
-                ON ccu.constraint_name = tc.constraint_name
-                AND ccu.table_schema = tc.table_schema
-            WHERE tc.constraint_type = 'FOREIGN KEY'
-              AND tc.table_name = @tableName
-              AND tc.table_schema = 'public'";
+                con.conname AS foreign_key_name,
+                src_att.attname AS column_name,
+                ref_rel.relname AS foreign_table_name,
+                ref_att.attname AS foreign_column_name,
+                CASE con.confupdtype
+                    WHEN 'a' THEN 'NO ACTION'  WHEN 'r' THEN 'RESTRICT'
+                    WHEN 'c' THEN 'CASCADE'    WHEN 'n' THEN 'SET NULL'
+                    WHEN 'd' THEN 'SET DEFAULT' END AS on_update,
+                CASE con.confdeltype
+                    WHEN 'a' THEN 'NO ACTION'  WHEN 'r' THEN 'RESTRICT'
+                    WHEN 'c' THEN 'CASCADE'    WHEN 'n' THEN 'SET NULL'
+                    WHEN 'd' THEN 'SET DEFAULT' END AS on_delete
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            JOIN pg_namespace ns ON ns.oid = rel.relnamespace
+            JOIN pg_class ref_rel ON ref_rel.oid = con.confrelid
+            JOIN LATERAL unnest(con.conkey)  WITH ORDINALITY AS src(attnum, ord) ON true
+            JOIN LATERAL unnest(con.confkey) WITH ORDINALITY AS ref(attnum, ord) ON ref.ord = src.ord
+            JOIN pg_attribute src_att ON src_att.attrelid = con.conrelid  AND src_att.attnum = src.attnum
+            JOIN pg_attribute ref_att ON ref_att.attrelid = con.confrelid AND ref_att.attnum = ref.attnum
+            WHERE con.contype = 'f'
+              AND rel.relname = @tableName
+              AND ns.nspname = 'public'
+            ORDER BY con.conname, src.ord;";
 
         var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
-
         return await ExecuteQueryAsync(query, parameters);
     }
 
@@ -457,6 +456,22 @@ public class SchemaFetcher
 
         var result = await ExecuteQueryAsync(sql, parameters);
         return result.Rows.Count > 0 ? result.Rows[0]["create_script"]?.ToString() : null;
+    }
+
+    public async Task<HashSet<string>> GetMaterializedViewNamesAsync()
+    {
+        const string sql = @"
+            SELECT relname
+            FROM pg_class
+            JOIN pg_namespace n ON n.oid = relnamespace
+            WHERE relkind = 'm'
+              AND n.nspname = 'public';";
+
+        var dataTable = await ExecuteQueryAsync(sql);
+        return dataTable.AsEnumerable()
+            .Select(row => row["relname"].ToString() ?? string.Empty)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     public async Task<IList<string>> GetSequenceNamesAsync()
@@ -555,80 +570,6 @@ public class SchemaFetcher
 
     #endregion
 
-    public async Task EnsurePgGetTableDefFunctionExistsAsync()
-    {
-        string checkFunctionQuery = @"
-                            SELECT EXISTS (
-                                SELECT 1 
-                                FROM pg_proc 
-                                JOIN pg_namespace n ON n.oid = pg_proc.pronamespace
-                                WHERE proname = 'pg_get_tabledef' AND n.nspname = 'public'
-                            );";
-
-        var result = await _connection.ExecuteQueryAsync(checkFunctionQuery);
-        bool exists = result.Rows.Count > 0 && (bool)result.Rows[0][0];
-
-        if (!exists)
-        {
-            string createFunctionSql = @"
-                            CREATE OR REPLACE FUNCTION pg_get_tabledef(p_table_name TEXT)
-                            RETURNS TEXT LANGUAGE plpgsql AS $$
-                            DECLARE
-                                col RECORD;
-                                col_defs TEXT := '';
-                                pk_cols TEXT := '';
-                                result TEXT;
-                            BEGIN
-                                FOR col IN
-                                    SELECT 
-                                        column_name,
-                                        data_type,
-                                        character_maximum_length,
-                                        numeric_precision,
-                                        numeric_scale,
-                                        is_nullable,
-                                        column_default
-                                    FROM information_schema.columns
-                                    WHERE table_schema = 'public' AND table_name = p_table_name
-                                    ORDER BY ordinal_position
-                                LOOP
-                                    col_defs := col_defs || 
-                                        format('""%s"" %s%s%s%s, ',
-                                            col.column_name,
-                                            CASE 
-                                                WHEN col.data_type = 'character varying' THEN format('varchar(%s)', col.character_maximum_length)
-                                                WHEN col.data_type = 'numeric' THEN format('numeric(%s,%s)', col.numeric_precision, col.numeric_scale)
-                                                ELSE col.data_type
-                                            END,
-                                            CASE WHEN col.column_default IS NOT NULL THEN ' DEFAULT ' || col.column_default ELSE '' END,
-                                            CASE WHEN col.is_nullable = 'NO' THEN ' NOT NULL' ELSE '' END,
-                                            ''
-                                        );
-                                END LOOP;
-
-                                -- Get primary key columns
-                                SELECT string_agg(format('""%s""', kcu.column_name), ', ')
-                                INTO pk_cols
-                                FROM information_schema.table_constraints tc
-                                JOIN information_schema.key_column_usage kcu 
-                                  ON tc.constraint_name = kcu.constraint_name
-                                WHERE tc.table_schema = 'public' 
-                                  AND tc.table_name = p_table_name 
-                                  AND tc.constraint_type = 'PRIMARY KEY';
-
-                                IF pk_cols IS NOT NULL THEN
-                                    col_defs := col_defs || format('PRIMARY KEY (%s), ', pk_cols);
-                                END IF;
-
-                                col_defs := left(col_defs, length(col_defs) - 2);
-                                result := format('CREATE TABLE ""%s"" (%s);', p_table_name, col_defs);
-                                RETURN result;
-                            END;
-                            $$;
-                            ";
-            await _connection.ExecuteCommandAsync(createFunctionSql);
-        }
-    }
 
     private void Log(string message, LogLevel level = LogLevel.Basic)
     {

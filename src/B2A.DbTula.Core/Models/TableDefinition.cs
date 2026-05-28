@@ -8,7 +8,7 @@ public class TableDefinition
     public List<ForeignKeyDefinition> ForeignKeys { get; set; } = new();
     public List<IndexDefinition> Indexes { get; set; } = new();
     public List<UniqueConstraintDefinition> UniqueConstraints { get; set; } = new();
-    public string CreateScript { get; set; } = string.Empty; // full CREATE TABLE script
+    public string? CreateScript { get; set; }
 
     /// <summary>
     /// Gets a canonical signature of the table structure for semantic comparison

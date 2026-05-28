@@ -10,6 +10,8 @@ namespace B2A.DbTula.Infrastructure.MySql
         private readonly SchemaFetcher _fetcher;
         private readonly DatabaseConnection _connection;
 
+        public DbProviderKind ProviderKind => DbProviderKind.MySql;
+
         public MySqlSchemaProvider(
             string connectionString,
             Action<int, int, string, bool> logger,
@@ -104,9 +106,9 @@ namespace B2A.DbTula.Infrastructure.MySql
             return await _fetcher.GetProcedureDefinitionAsync(procedureName);
         }
 
-        public async Task<string> GetCreateTableScriptAsync(string tableName)
+        public Task<string?> GetCreateTableScriptAsync(string tableName)
         {
-            return await _fetcher.GetCreateTableScriptAsync(tableName);
+            return Task.FromResult<string?>(null);
         }
 
         public Task<IList<UniqueConstraintDefinition>> GetUniqueConstraintsAsync(string tableName)
@@ -195,5 +197,11 @@ namespace B2A.DbTula.Infrastructure.MySql
             return result.Rows.Count > 0 ? result.Rows[0]["SQL Original Statement"].ToString() : null;
         }
         #endregion
+
+        public Task<HashSet<string>> GetMaterializedViewNamesAsync()
+        {
+            // MySQL does not have materialized views
+            return Task.FromResult(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        }
     }
 }

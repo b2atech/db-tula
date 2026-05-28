@@ -29,6 +29,9 @@ public class SchemaComparer : ISchemaComparer
 {
     private readonly SqlDiffService _sqlDiffService;
     private ComparisonOptions _currentOptions = new();
+    private HashSet<string> _sourceMatViews = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _targetMatViews = new(StringComparer.OrdinalIgnoreCase);
+    private IDatabaseSchemaProvider? _lastSourceProvider;
 
     public SchemaComparer()
     {
@@ -46,6 +49,14 @@ public class SchemaComparer : ISchemaComparer
         var results = new List<ComparisonResult>();
 
         progressLogger?.Invoke(0, 0, "🔍 Fetching schema objects...", false);
+
+        // Fetch materialized view names upfront so table comparison can skip PK logic correctly
+        _lastSourceProvider = sourceProvider;
+        var sourceMatViewsTask = sourceProvider.GetMaterializedViewNamesAsync();
+        var targetMatViewsTask = targetProvider.GetMaterializedViewNamesAsync();
+        await Task.WhenAll(sourceMatViewsTask, targetMatViewsTask);
+        _sourceMatViews = sourceMatViewsTask.Result;
+        _targetMatViews = targetMatViewsTask.Result;
 
         // --- TABLES ---
         var sourceTables = await sourceProvider.GetTablesAsync();
@@ -290,8 +301,8 @@ public class SchemaComparer : ISchemaComparer
         List<ComparisonSubResult> subResults)
     {
         // Check if tables are materialized views (skip PK logic for matviews)
-        var sourceIsMatView = await IsMaterializedViewAsync(sourceProvider, source.Name);
-        var targetIsMatView = await IsMaterializedViewAsync(targetProvider, target.Name);
+        var sourceIsMatView = IsMaterializedView(sourceProvider, source.Name);
+        var targetIsMatView = IsMaterializedView(targetProvider, target.Name);
         
         if (sourceIsMatView || targetIsMatView)
         {
@@ -302,9 +313,8 @@ public class SchemaComparer : ISchemaComparer
         var sourcePk = source.PrimaryKeys.FirstOrDefault();
         var targetPk = target.PrimaryKeys.FirstOrDefault();
 
-        // Validate PKs with provider-specific logic (handles invalid/dropped PKs)
-        var sourceValid = sourcePk != null && await IsValidPrimaryKeyAsync(sourceProvider, source.Name, sourcePk);
-        var targetValid = targetPk != null && await IsValidPrimaryKeyAsync(targetProvider, target.Name, targetPk);
+        var sourceValid = sourcePk != null && IsValidPrimaryKey(sourcePk);
+        var targetValid = targetPk != null && IsValidPrimaryKey(targetPk);
 
         if (!sourceValid && targetValid)
         {
@@ -435,21 +445,11 @@ public class SchemaComparer : ISchemaComparer
     {
         var status = ComparisonStatus.Match;
         
-        // Filter out invalid indexes using provider-specific validation
-        var validSourceIndexes = new List<IndexDefinition>();
-        foreach (var idx in source.Indexes)
-        {
-            if (await IsValidIndexAsync(sourceProvider, idx))
-                validSourceIndexes.Add(idx);
-        }
+        // Invalid indexes are already excluded by indisvalid=true in the SQL query.
+        // Apply in-memory filter only as a safeguard for empty column lists.
+        var validSourceIndexes = source.Indexes.Where(IsValidIndex).ToList();
+        var validTargetIndexes = target.Indexes.Where(IsValidIndex).ToList();
 
-        var validTargetIndexes = new List<IndexDefinition>();
-        foreach (var idx in target.Indexes)
-        {
-            if (await IsValidIndexAsync(targetProvider, idx))
-                validTargetIndexes.Add(idx);
-        }
-        
         // Group indexes by structural key to enable semantic comparison (method + columns + options + predicate)
         var sourceIndexesByStructure = validSourceIndexes
             .GroupBy(idx => idx.GetStructuralKey(), StringComparer.OrdinalIgnoreCase)
@@ -911,112 +911,23 @@ public class SchemaComparer : ISchemaComparer
 
     // --- PROVIDER-SPECIFIC HELPERS ---
 
-    /// <summary>
-    /// Detects if the provider is PostgreSQL-based
-    /// </summary>
-    private static bool IsPostgresProvider(IDatabaseSchemaProvider provider)
-    {
-        return provider.GetType().Name.Contains("Postgres", StringComparison.OrdinalIgnoreCase);
-    }
+    private static string GetDbKind(IDatabaseSchemaProvider provider) =>
+        provider.ProviderKind switch
+        {
+            DbProviderKind.Postgres => "postgres",
+            DbProviderKind.MySql    => "mysql",
+            _                      => "unknown"
+        };
 
-    /// <summary>
-    /// Detects if the provider is MySQL-based  
-    /// </summary>
-    private static bool IsMySqlProvider(IDatabaseSchemaProvider provider)
-    {
-        return provider.GetType().Name.Contains("MySql", StringComparison.OrdinalIgnoreCase) ||
-               provider.GetType().Name.Contains("MySQL", StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool IsValidPrimaryKey(PrimaryKeyDefinition pk) => pk.Columns.Any();
 
-    /// <summary>
-    /// Gets the database kind identifier for canonicalization
-    /// </summary>
-    private static string GetDbKind(IDatabaseSchemaProvider provider)
-    {
-        if (IsPostgresProvider(provider))
-            return "postgres";
-        if (IsMySqlProvider(provider))
-            return "mysql";
-        return "unknown";
-    }
+    // Invalid indexes (indisvalid=false) are already excluded by the SQL query in SchemaFetcher.
+    // This helper exists only for any additional in-memory filtering needed in future.
+    private static bool IsValidIndex(IndexDefinition index) => index.Columns.Any();
 
-    /// <summary>
-    /// Enhanced primary key comparison with provider-specific catalog logic
-    /// </summary>
-    private static Task<bool> IsValidPrimaryKeyAsync(IDatabaseSchemaProvider provider, string tableName, PrimaryKeyDefinition pk)
+    private bool IsMaterializedView(IDatabaseSchemaProvider provider, string tableName)
     {
-        try
-        {
-            if (IsPostgresProvider(provider))
-            {
-                // For Postgres: check if PK is valid, not dropped, handles partitioned tables
-                // This is a placeholder for enhanced catalog queries that would be implemented
-                // in the provider-specific classes
-                return Task.FromResult(pk.Columns.Any());
-            }
-            else if (IsMySqlProvider(provider))
-            {
-                // For MySQL: use information_schema with equivalent normalization
-                return Task.FromResult(pk.Columns.Any());
-            }
-            
-            return Task.FromResult(pk.Columns.Any());
-        }
-        catch
-        {
-            // Fallback to basic validation if provider-specific logic fails
-            return Task.FromResult(pk.Columns.Any());
-        }
-    }
-
-    /// <summary>
-    /// Enhanced index validation with provider-specific checks
-    /// </summary>
-    private static Task<bool> IsValidIndexAsync(IDatabaseSchemaProvider provider, IndexDefinition index)
-    {
-        try
-        {
-            if (IsPostgresProvider(provider))
-            {
-                // For Postgres: check invalid indexes, inherited tables, partial indexes
-                // Provider should handle catalog joins for robust detection
-                return Task.FromResult(index.Columns.Any());
-            }
-            else if (IsMySqlProvider(provider))
-            {
-                // For MySQL: use information_schema equivalent checks
-                return Task.FromResult(index.Columns.Any());
-            }
-            
-            return Task.FromResult(index.Columns.Any());
-        }
-        catch
-        {
-            // Fallback to basic validation
-            return Task.FromResult(index.Columns.Any());
-        }
-    }
-
-    /// <summary>
-    /// Checks if a table is a materialized view (should skip PK logic)
-    /// </summary>
-    private static Task<bool> IsMaterializedViewAsync(IDatabaseSchemaProvider provider, string tableName)
-    {
-        try
-        {
-            if (IsPostgresProvider(provider))
-            {
-                // In a real implementation, this would query pg_class for relkind = 'm'
-                // For now, basic heuristic
-                var isMatView = tableName.ToLower().Contains("_mv") || tableName.ToLower().Contains("matview");
-                return Task.FromResult(isMatView);
-            }
-            
-            return Task.FromResult(false);
-        }
-        catch
-        {
-            return Task.FromResult(false);
-        }
+        var matViews = provider == _lastSourceProvider ? _sourceMatViews : _targetMatViews;
+        return matViews.Contains(tableName);
     }
 }

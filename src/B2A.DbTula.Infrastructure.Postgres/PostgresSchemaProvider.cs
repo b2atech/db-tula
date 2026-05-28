@@ -9,6 +9,8 @@ namespace B2a.DbTula.Infrastructure.Postgres;
 
 public class PostgresSchemaProvider : IDatabaseSchemaProvider
 {
+    public DbProviderKind ProviderKind => DbProviderKind.Postgres;
+
     private readonly SchemaFetcher _fetcher;
     private readonly DatabaseConnection _connection;
     public PostgresSchemaProvider(
@@ -117,9 +119,11 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
         return await _fetcher.GetSequenceDefinitionAsync(sequenceName);
     }
 
-    public async Task<string> GetCreateTableScriptAsync(string tableName)
+    public Task<string?> GetCreateTableScriptAsync(string tableName)
     {
-        return await _fetcher.GetCreateTableScriptAsync(tableName);
+        // Assembling a CREATE TABLE DDL string is not needed for structural comparison.
+        // The comparison uses typed model objects (columns, PKs, FKs, indexes) directly.
+        return Task.FromResult<string?>(null);
     }
 
     private List<DbFunctionDefinition> ParseFunctionOrProcedureList(System.Data.DataTable table)
@@ -147,6 +151,11 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider
     public async Task<string?> GetTriggerDefinitionAsync(string triggerName)
     {
         return await _fetcher.GetTriggerDefinitionAsync(triggerName);
+    }
+
+    public async Task<HashSet<string>> GetMaterializedViewNamesAsync()
+    {
+        return await _fetcher.GetMaterializedViewNamesAsync();
     }
 
     public async Task<IList<DbViewDefinition>> GetViewsAsync()

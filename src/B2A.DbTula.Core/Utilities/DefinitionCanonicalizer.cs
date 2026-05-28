@@ -36,41 +36,46 @@ public static class DefinitionCanonicalizer
     }
 
     /// <summary>
-    /// Removes ownership and definer references from DDL
+    /// Removes ownership and definer references from DDL using explicit line-level patterns only.
+    /// Does NOT use wildcard word.dot removal to avoid corrupting SQL bodies (type casts, table-qualified refs, etc.).
     /// </summary>
     private static string RemoveOwnershipReferences(string ddl, string dbKind)
     {
         var result = ddl;
 
-        // PostgreSQL specific patterns
         if (dbKind.Equals("postgres", StringComparison.OrdinalIgnoreCase))
         {
-            // Remove OWNER TO clauses: ALTER ... OWNER TO username; (with more flexible matching)
-            result = Regex.Replace(result, @"ALTER\s+[A-Z]+\s+[^;]+\s+OWNER\s+TO\s+[^;]+;", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            
-            // Remove owner prefixes from object names: owner.object_name -> object_name  
-            result = Regex.Replace(result, @"\bpublic\.", "", RegexOptions.IgnoreCase);
-            result = Regex.Replace(result, @"\binventory\.", "", RegexOptions.IgnoreCase); // For the test case
-            result = Regex.Replace(result, @"\b\w+\.", "", RegexOptions.IgnoreCase);
-            
-            // Remove SET search_path statements
-            result = Regex.Replace(result, @"SET\s+search_path\s*=\s*[^;]+;", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            
-            // Remove schema qualifications in CREATE statements (when not needed for comparison)
-            result = Regex.Replace(result, @"CREATE\s+(\w+)\s+\w+\.", "CREATE $1 ", RegexOptions.IgnoreCase);
+            // Remove full ALTER ... OWNER TO statements (safe: full statement on its own)
+            result = Regex.Replace(result,
+                @"ALTER\s+(TABLE|SEQUENCE|FUNCTION|PROCEDURE|VIEW|MATERIALIZED\s+VIEW)\s+[^;]+\s+OWNER\s+TO\s+\S+\s*;",
+                "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+            // Remove SET search_path lines only (full statement)
+            result = Regex.Replace(result,
+                @"^\s*SET\s+search_path\s*=\s*[^;]+;\s*$",
+                "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+            // Remove GRANT/REVOKE lines only (full statement)
+            result = Regex.Replace(result,
+                @"^\s*(GRANT|REVOKE)\s+[^;]+;\s*$",
+                "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+            // Strip 'public.' schema prefix ONLY when it appears directly after a DDL keyword,
+            // never inside function bodies. This is safe because DDL keywords precede object names.
+            result = Regex.Replace(result,
+                @"(?<=\b(TABLE|VIEW|FUNCTION|PROCEDURE|SEQUENCE|INDEX|TRIGGER|ON)\s+)public\.",
+                "", RegexOptions.IgnoreCase);
         }
 
-        // MySQL specific patterns  
         if (dbKind.Equals("mysql", StringComparison.OrdinalIgnoreCase))
         {
-            // Remove DEFINER clauses: DEFINER=`username`@`host`
-            result = Regex.Replace(result, @"DEFINER\s*=\s*`[^`]+`@`[^`]+`", "", RegexOptions.IgnoreCase);
-            result = Regex.Replace(result, @"DEFINER\s*=\s*'[^']+'@'[^']+'", "", RegexOptions.IgnoreCase);
-            result = Regex.Replace(result, @"DEFINER\s*=\s*[^\s]+@[^\s]+", "", RegexOptions.IgnoreCase);
-            
-            // Remove database name prefixes: database.object_name -> object_name
+            // Remove DEFINER clauses in all common quoting styles
+            result = Regex.Replace(result, @"DEFINER\s*=\s*`[^`]*`@`[^`]*`", "", RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, @"DEFINER\s*=\s*'[^']*'@'[^']*'", "", RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, @"DEFINER\s*=\s*\S+@\S+", "", RegexOptions.IgnoreCase);
+
+            // Remove backtick-quoted database prefix: `dbname`. → (nothing)
             result = Regex.Replace(result, @"`[^`]+`\.", "", RegexOptions.IgnoreCase);
-            result = Regex.Replace(result, @"\b\w+\.", "", RegexOptions.IgnoreCase);
         }
 
         return result;

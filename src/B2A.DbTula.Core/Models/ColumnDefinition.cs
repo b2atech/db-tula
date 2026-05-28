@@ -15,9 +15,24 @@ public class ColumnDefinition
     public bool IsNullable { get; set; }
 
     /// <summary>
-    /// Length for variable length data types (e.g., varchar(255))
+    /// Length for variable-length types (e.g., varchar(255))
     /// </summary>
     public int? Length { get; set; }
+
+    /// <summary>
+    /// Precision for numeric types (e.g., 18 in numeric(18,4))
+    /// </summary>
+    public int? NumericPrecision { get; set; }
+
+    /// <summary>
+    /// Scale for numeric types (e.g., 4 in numeric(18,4))
+    /// </summary>
+    public int? NumericScale { get; set; }
+
+    /// <summary>
+    /// Precision for datetime types (e.g., timestamp(3))
+    /// </summary>
+    public int? DateTimePrecision { get; set; }
 
     /// <summary>
     /// Default value expression or literal assigned to the column
@@ -48,6 +63,9 @@ public class ColumnDefinition
             && string.Equals(DataType, other.DataType, StringComparison.OrdinalIgnoreCase)
             && IsNullable == other.IsNullable
             && Length == other.Length
+            && NumericPrecision == other.NumericPrecision
+            && NumericScale == other.NumericScale
+            && DateTimePrecision == other.DateTimePrecision
             && string.Equals(DefaultValue ?? "", other.DefaultValue ?? "", StringComparison.OrdinalIgnoreCase)
             && IsComputed == other.IsComputed
             && IsIdentity == other.IsIdentity;
@@ -55,6 +73,8 @@ public class ColumnDefinition
 
     public override int GetHashCode()
     {
-        return HashCode.Combine(Name.ToLower(), DataType.ToLower(), IsNullable, Length, DefaultValue?.ToLower(), IsComputed, IsIdentity);
+        return HashCode.Combine(
+            HashCode.Combine(Name.ToLower(), DataType.ToLower(), IsNullable, Length),
+            HashCode.Combine(NumericPrecision, NumericScale, DateTimePrecision, DefaultValue?.ToLower(), IsComputed, IsIdentity));
     }
 }
