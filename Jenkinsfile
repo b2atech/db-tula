@@ -41,7 +41,6 @@ pipeline {
                         --configuration Release \
                         --runtime linux-x64 \
                         --self-contained true \
-                        -p:PublishSingleFile=true \
                         -o ./publish/
 
                     chmod +x ./publish/B2A.DbTula.Cli
