@@ -30,17 +30,17 @@
 
 | # | Task | Status |
 |---|---|---|
-| 8 | Add SchemaSnapshot + IDatabaseSchemaSnapshot to Core | 🔜 Next up |
-| 9 | Implement BulkSchemaFetcher for Postgres | 🔜 Next up |
-| 10 | Refactor SchemaComparer to consume SchemaSnapshot | 🔜 Next up |
+| 8 | Add SchemaSnapshot + IDatabaseSchemaSnapshot to Core | ✅ Done | commit `a378aa6` |
+| 9 | Implement BulkSchemaFetcher for Postgres | ✅ Done | commit `a378aa6` |
+| 10 | Refactor SchemaComparer to consume SchemaSnapshot | ✅ Done | commit `a378aa6` |
 
 ## Phase 3 — Missing Coverage
 
 | # | Task | Status |
 |---|---|---|
-| 11 | Add CheckConstraintDefinition model + comparison | ⏳ Pending |
-| 12 | Full sequence definition comparison | ⏳ Pending |
-| 13 | Add EnumTypeDefinition model + comparison | ⏳ Pending |
+| 11 | Add CheckConstraintDefinition model + comparison | ✅ Done | commit `a378aa6` |
+| 12 | Full sequence definition comparison | ✅ Done | commit `a378aa6` |
+| 13 | Add EnumTypeDefinition model + comparison | ⏳ Pending | Next session |
 
 ## Phase 4 — Reporting
 
@@ -75,6 +75,7 @@
 |---|---|---|
 | 2026-05-28 | Architecture review, memory files, task creation | — |
 | 2026-05-28 | **Phase 1 complete** — all 7 tasks (6 bugs + ProviderKind) | commit `386f565`, 0 build errors |
+| 2026-05-28 | **Phase 2+3 complete** — bulk snapshot (26 queries total), check constraints, full sequence comparison | commit `a378aa6`, 0 build errors |
 
 ---
 
