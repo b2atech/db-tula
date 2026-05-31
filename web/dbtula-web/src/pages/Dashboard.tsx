@@ -5,7 +5,52 @@ import { Database, GitCompare, Play, CheckCircle, AlertTriangle, XCircle, Clock,
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
-import { api, type DbHealth, type Summary } from '../api/client'
+import { api, type DbHealth, type Summary, type ProfileDriftSeries } from '../api/client'
+
+// 10 distinct colours for up to 10 service lines
+const LINE_COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#84cc16']
+
+function ProfileDriftChart({ series }: { series: ProfileDriftSeries[] }) {
+  // Merge all series into one flat array keyed by date
+  const allDates = [...new Set(series.flatMap(s => s.points.map(p => p.date)))].sort()
+  const data = allDates.map(date => {
+    const row: Record<string, string | number> = { date }
+    series.forEach(s => {
+      const pt = s.points.find(p => p.date === date)
+      // Strip "QA vs PROD · " prefix for shorter legend labels
+      const label = s.profile.replace('QA vs PROD · ', '')
+      row[label] = pt?.drift ?? 0
+    })
+    return row
+  })
+  const labels = series.map(s => s.profile.replace('QA vs PROD · ', ''))
+
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+        <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={d => d.slice(5)} />
+        <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} allowDecimals={false} />
+        <Tooltip
+          contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 11 }}
+          labelFormatter={l => `Date: ${l}`}
+        />
+        <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+        {labels.map((label, i) => (
+          <Line
+            key={label}
+            type="monotone"
+            dataKey={label}
+            stroke={LINE_COLORS[i % LINE_COLORS.length]}
+            strokeWidth={1.5}
+            dot={false}
+            activeDot={{ r: 3 }}
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
 
 function StatCard({ label, value, sub, icon: Icon, color }: {
   label: string; value: string | number; sub?: string;
@@ -68,7 +113,7 @@ export default function Dashboard() {
   const qc = useQueryClient()
 
   const { data: summary } = useQuery({ queryKey: ['metrics-summary'], queryFn: api.metrics.summary })
-  const { data: trend = [] } = useQuery({ queryKey: ['drift-trend'], queryFn: () => api.metrics.driftTrend(30) })
+  const { data: profileTrend = [] } = useQuery({ queryKey: ['drift-trend-by-profile'], queryFn: () => api.metrics.driftTrendByProfile(30) })
   const { data: health = [] } = useQuery({
     queryKey: ['db-health'], queryFn: api.metrics.dbHealth, refetchInterval: 30000
   })
@@ -109,32 +154,19 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        {/* Drift Trend Chart */}
+        {/* Per-Profile Drift Trend Chart */}
         <Card className="col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">Drift Trend</CardTitle>
-            <CardDescription>Daily drift counts over the last 30 days</CardDescription>
+            <CardTitle className="text-base">Drift Trend by Service</CardTitle>
+            <CardDescription>Daily drift count per Dhanman service — last 30 days</CardDescription>
           </CardHeader>
           <CardContent>
-            {trend.length === 0 ? (
+            {profileTrend.length === 0 ? (
               <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
                 No data yet — run some comparisons first
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={trend} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={d => d.slice(5)} />
-                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
-                    labelFormatter={l => `Date: ${l}`}
-                  />
-                  <Legend iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                  <Line type="monotone" dataKey="mismatch" stroke="#f59e0b" strokeWidth={2} dot={false} name="Mismatch" />
-                  <Line type="monotone" dataKey="missingInTarget" stroke="#ef4444" strokeWidth={2} dot={false} name="Missing in Target" />
-                </LineChart>
-              </ResponsiveContainer>
+              <ProfileDriftChart series={profileTrend} />
             )}
           </CardContent>
         </Card>

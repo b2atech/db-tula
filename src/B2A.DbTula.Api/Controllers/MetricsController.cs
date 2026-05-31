@@ -48,6 +48,41 @@ public class MetricsController(AppDbContext db) : ControllerBase
         return Ok(metrics);
     }
 
+    [HttpGet("drift-trend-by-profile")]
+    public async Task<IActionResult> DriftTrendByProfile([FromQuery] int days = 30)
+    {
+        var cutoff = DateTime.UtcNow.AddDays(-days);
+
+        var raw = await db.DriftMetrics
+            .Where(m => m.RunDate >= cutoff)
+            .Join(db.ComparisonRuns, m => m.ComparisonRunId, r => r.Id,
+                (m, r) => new { m.RunDate, m.MismatchCount, m.MissingInTargetCount, r.ProfileId })
+            .Join(db.Profiles, x => x.ProfileId, p => p.Id,
+                (x, p) => new { x.RunDate, x.MismatchCount, x.MissingInTargetCount, ProfileName = p.Name })
+            .ToListAsync();
+
+        // Group by profile → { profileName, points: [{date, total}] }
+        var result = raw
+            .GroupBy(x => x.ProfileName)
+            .Select(g => new
+            {
+                profile = g.Key,
+                points = g
+                    .GroupBy(x => x.RunDate.Date)
+                    .Select(d => new
+                    {
+                        date = d.Key.ToString("yyyy-MM-dd"),
+                        drift = d.Sum(x => x.MismatchCount + x.MissingInTargetCount)
+                    })
+                    .OrderBy(p => p.date)
+                    .ToList()
+            })
+            .OrderBy(x => x.profile)
+            .ToList();
+
+        return Ok(result);
+    }
+
     [HttpGet("db-health")]
     public async Task<IActionResult> DbHealth()
     {

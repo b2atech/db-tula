@@ -73,6 +73,7 @@ export const api = {
   metrics: {
     summary: () => request<MetricsSummary>('/api/metrics/summary'),
     driftTrend: (days = 30) => request<DriftTrendPoint[]>(`/api/metrics/drift-trend?days=${days}`),
+    driftTrendByProfile: (days = 30) => request<ProfileDriftSeries[]>(`/api/metrics/drift-trend-by-profile?days=${days}`),
     dbHealth: () => request<DbHealth[]>('/api/metrics/db-health'),
   },
   admin: {
@@ -167,6 +168,8 @@ export interface MetricsSummary {
 }
 
 export interface DriftTrendPoint { date: string; mismatch: number; missingInTarget: number; }
+export interface ProfileDriftPoint { date: string; drift: number; }
+export interface ProfileDriftSeries { profile: string; points: ProfileDriftPoint[]; }
 
 export interface DbHealth {
   profileId: string; profileName: string;
