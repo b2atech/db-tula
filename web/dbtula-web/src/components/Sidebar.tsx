@@ -38,9 +38,9 @@ export default function Sidebar() {
   return (
     <div className="fixed inset-y-0 left-0 flex w-60 flex-col bg-slate-900 border-r border-slate-800">
       {/* Logo */}
-      <div className="flex h-16 items-center gap-3 px-6 border-b border-slate-800">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-indigo-600 text-white text-xs font-bold">dt</div>
-        <span className="font-semibold text-white text-sm">db-tula</span>
+      <div className="flex h-16 items-center gap-3 px-5 border-b border-slate-800">
+        <img src="/logo.svg" alt="db-tula" className="h-8 w-8 rounded-lg" />
+        <span className="font-semibold text-white text-sm tracking-wide">db-tula</span>
         <ChevronRight className="h-3 w-3 text-slate-600 ml-auto" />
       </div>
 

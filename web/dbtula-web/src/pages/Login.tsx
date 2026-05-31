@@ -13,7 +13,10 @@ export default function Login() {
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-10 w-full max-w-sm text-center">
-          <div className="text-3xl font-bold text-indigo-700 mb-2">db-tula</div>
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <img src="/logo.svg" alt="db-tula" className="h-12 w-12 rounded-xl shadow" />
+            <span className="text-3xl font-bold text-indigo-700">db-tula</span>
+          </div>
           <p className="text-gray-500 mb-8 text-sm">Database schema comparison platform</p>
           <GoogleLogin
             onSuccess={async (cred) => {
