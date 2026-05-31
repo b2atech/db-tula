@@ -110,10 +110,14 @@ pipeline {
                             ${APP_SERVER}:/var/www/dbtula-api/
 
                         echo "=== Deploying React UI ==="
+                        ssh -o StrictHostKeyChecking=no ${APP_SERVER} \
+                            "sudo chown -R ubuntu:ubuntu /var/www/dbtula-web"
                         rsync -az --delete \
                             -e "ssh -o StrictHostKeyChecking=no" \
                             ./web/dbtula-web/dist/ \
                             ${APP_SERVER}:/var/www/dbtula-web/
+                        ssh -o StrictHostKeyChecking=no ${APP_SERVER} \
+                            "sudo chown -R www-data:www-data /var/www/dbtula-web"
 
                         echo "=== Restarting API ==="
                         ssh -o StrictHostKeyChecking=no ${APP_SERVER} \
