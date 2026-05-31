@@ -236,7 +236,10 @@ export default function ComparisonResult() {
   useEffect(() => {
     if (!id || run?.status === 'Completed' || run?.status === 'Failed') return
     const conn = new signalR.HubConnectionBuilder()
-      .withUrl('/hubs/comparison')
+      .withUrl('/hubs/comparison', {
+        // WebSocket can't send headers — pass JWT via query string
+        accessTokenFactory: () => sessionStorage.getItem('dbtula_token') ?? ''
+      })
       .withAutomaticReconnect()
       .build()
     conn.start().then(() => conn.invoke('JoinRun', id)).catch(() => {})

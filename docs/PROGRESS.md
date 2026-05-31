@@ -80,6 +80,42 @@
 
 ---
 
+## Phase 9 — Production Deployment (2026-06-01)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 28 | shadcn/ui + dark sidebar + Recharts dashboard | ✅ Done | |
+| 29 | Named comparison profiles (DB-backed) | ✅ Done | ComparisonProfile model |
+| 30 | DB-backed metrics (DriftMetric per object type) | ✅ Done | Powers drift trend chart |
+| 31 | Statement-level SyncPlanner (DbSyncStatement) | ✅ Done | Checkbox per SQL statement |
+| 32 | AllowedEmail whitelist (DB-backed, Admin UI) | ✅ Done | AdminController |
+| 33 | Data Protection keys persisted in DB | ✅ Done | Survives redeploy |
+| 34 | HostMappings config (env-specific DB hosts) | ✅ Done | WireGuard local, prod IP on server |
+| 35 | JWT stored in sessionStorage + Bearer header | ✅ Done | Replaces httpOnly cookie (dev issue) |
+| 36 | Deployed to 57.129.74.139 (dbtula.dgtula.com) | ✅ Done | nginx + systemd + certbot HTTPS |
+| 37 | Jenkinsfile: deploy on commit, compare nightly | ✅ Done | `when { not { triggeredBy TimerTrigger } }` |
+| 38 | ScheduledRunController (Jenkins → API trigger) | ✅ Done | X-Api-Key header |
+| 39 | nginx WebSocket fix (connection_upgrade map) | ✅ Done | SignalR wss:// |
+| 40 | ForwardedHeaders middleware | ✅ Done | nginx HTTPS proxy awareness |
+
+**Production state (2026-06-01):**
+- Live at: https://dbtula.dgtula.com
+- App server: 57.129.74.139 (dhanman-prod-n)
+- App DB: prod-dbtula on 51.79.156.217
+- 9 profiles registered (Common, Agent, Community, EInvoice, Inventory, Payment, Payroll, Purchase, Sales)
+- Jenkins: deploys on commit to main + runs comparisons at midnight IST
+
+**Jenkins credentials needed:**
+- `DO_FALLBACK_HOST` (SSH key — existing)
+- `VITE_GOOGLE_CLIENT_ID` (secret text — added)
+- `DBTULA_API_KEY` (secret text — value: dbtula-jenkins-key-2026-b2atech)
+
+**Key files:**
+- API: `src/B2A.DbTula.Api/`
+- React: `web/dbtula-web/`
+- Prod config: `/var/www/dbtula-api/appsettings.Production.json` on server
+- Nginx: `/etc/nginx/sites-available/dbtula` on server
+
 ## Phase 8 — Web Platform (db-tula Web UI)
 
 New initiative started 2026-05-31. Goal: React web app with Google OAuth, on-demand comparisons, live results, admin sync apply.

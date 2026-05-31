@@ -36,23 +36,25 @@ builder.Services.AddAuthentication(o =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
         ValidateLifetime = true
     };
-    // Support JWT from httpOnly cookie
+    // Support JWT from Authorization header, cookie, or SignalR query string
     o.Events = new JwtBearerEvents
     {
         OnMessageReceived = ctx =>
         {
-            if (ctx.Request.Cookies.TryGetValue("dbtula_token", out var token))
-                ctx.Token = token;
-            // Also support Authorization header for Swagger/tools
+            // SignalR passes token via ?access_token= query string (WebSocket can't send headers)
+            var qs = ctx.Request.Query["access_token"];
+            if (!string.IsNullOrEmpty(qs) && ctx.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                ctx.Token = qs;
+            // Also accept from cookie
+            else if (ctx.Request.Cookies.TryGetValue("dbtula_token", out var cookie))
+                ctx.Token = cookie;
             return Task.CompletedTask;
         }
     };
 });
 builder.Services.AddAuthorization();
 
-// ── Data Protection — keys persisted in DB so they survive redeploys ──────────
-builder.Services.AddDataProtection()
-    .PersistKeysToDbContext<AppDbContext>();
+// ── Credential encryption — fixed AES-256 key from config ────────────────────
 builder.Services.AddCredentialService();
 
 // ── Services ─────────────────────────────────────────────────────────────────
@@ -98,7 +100,18 @@ builder.Services.AddSwaggerGen(c =>
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Behind nginx — trust forwarded headers so SignalR gets correct scheme (wss://)
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+                       | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    o.KnownNetworks.Clear();
+    o.KnownProxies.Clear();
+});
+
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 // Apply migrations on startup (non-fatal — tables already created via SQL script if DB is firewalled)
 using (var scope = app.Services.CreateScope())
