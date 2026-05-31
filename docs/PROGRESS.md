@@ -80,6 +80,37 @@
 
 ---
 
+## Phase 8 — Web Platform (db-tula Web UI)
+
+New initiative started 2026-05-31. Goal: React web app with Google OAuth, on-demand comparisons, live results, admin sync apply.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 19 | Create `B2A.DbTula.Api` project (ASP.NET Core Web API + SignalR) | ✅ Done | Added to B2A.DbTula.sln |
+| 20 | EF Core models (AppUser, RegisteredDatabase, ComparisonRun, SyncApplyLog) | ✅ Done | Migration: `InitialCreate` |
+| 21 | Google OAuth → JWT issuance (httpOnly cookie) | ✅ Done | `AuthController`, `AuthService` |
+| 22 | `/api/databases` CRUD (credential encryption via Data Protection) | ✅ Done | `DatabasesController` |
+| 23 | `/api/comparisons` + `ComparisonWorker` (background service + SignalR hub) | ✅ Done | Reuses existing SchemaComparer + SyncScriptGenerator |
+| 24 | `/api/comparisons/{id}/apply-safe` (Admin only, write account, audit log) | ✅ Done | `ComparisonsController` |
+| 25 | `/api/admin` (user management, audit log) | ✅ Done | `AdminController` |
+| 26 | React frontend scaffold (Vite + TypeScript + Tailwind) | ✅ Done | `web/dbtula-web/` |
+| 27 | React pages: Login, Dashboard, NewComparison, ComparisonResult, Databases, Admin | ✅ Done | Build passes clean |
+
+**Remaining to configure before running:**
+- Create `appsettings.Development.json` in `src/B2A.DbTula.Api/` with real DB credentials, JWT secret, Google Client ID
+- Create `web/dbtula-web/.env` with `VITE_GOOGLE_CLIENT_ID=...`
+- Create `dbtula_app` Postgres database on the app server (NOT prod)
+- Run `dotnet ef database update` to apply migration
+- Set up Google OAuth Client ID at console.cloud.google.com (add `http://localhost:5173` as authorized origin)
+- Set up a write Postgres role for the target DBs with no DROP privilege
+
+**Architecture decisions made:**
+- API references Cli project directly (no separate Comparison library) — zero changes to existing code
+- Comparisons use read-only credentials; sync apply uses separate write account (registered as `isWriteAccount=true`)
+- SAFE changes only via UI; RISKY/DESTRUCTIVE = download SQL only
+- JWT stored in httpOnly cookie, not localStorage
+- First Google sign-in automatically becomes Admin
+
 ## Key File Locations
 
 | What | Where |
@@ -93,3 +124,7 @@
 | FK model | `src/B2A.DbTula.Core/Models/ForeignKeyDefinition.cs` |
 | Provider interface | `src/B2A.DbTula.Core/Abstractions/IDatabaseSchemaProvider.cs` |
 | Jenkins pipeline | `Jenkinsfile` (repo root) |
+
+
+
+

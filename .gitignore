@@ -1,5 +1,17 @@
 # Local settings — never commit
 appsettings.local.json
+appsettings.Development.json
+appsettings.*.json
+
+# Temporary work files
+Temp*.sql
+Temp*.html
+
+# Generated nginx configs
+gen_nginx*.sh
+
+# Extracted schema snapshots
+extracted-schema/
 
 # Ignore all bin and obj folders anywhere in the repo
 **/bin/
