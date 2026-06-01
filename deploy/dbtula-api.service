@@ -11,8 +11,15 @@ Restart=always
 RestartSec=10
 KillSignal=SIGINT
 SyslogIdentifier=dbtula-api
+MemoryMax=600M
+MemorySwapMax=0
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://localhost:5275
+# Secrets — set these values on the server, never commit real values
+Environment=JWT__SECRET=CHANGE_ME_32_CHARS_MIN
+Environment=AUTH__ENCRYPTIONKEY=CHANGE_ME_ANY_LENGTH
+Environment=AUTH__SCHEDULEDAPIKEY=CHANGE_ME
+Environment=CONNECTIONSTRINGS__APPDB=CHANGE_ME
 
 [Install]
 WantedBy=multi-user.target

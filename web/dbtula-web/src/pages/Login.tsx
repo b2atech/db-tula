@@ -1,5 +1,5 @@
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 
@@ -8,6 +8,8 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
 export default function Login() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [params] = useSearchParams();
+  const expired = params.get('expired') === '1';
 
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
@@ -17,7 +19,12 @@ export default function Login() {
             <img src="/logo.svg" alt="db-tula" className="h-12 w-12 rounded-xl shadow" />
             <span className="text-3xl font-bold text-indigo-700">db-tula</span>
           </div>
-          <p className="text-gray-500 mb-8 text-sm">Database schema comparison platform</p>
+          <p className="text-gray-500 mb-6 text-sm">Database schema comparison platform</p>
+          {expired && (
+            <div className="mb-4 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+              Your session expired — please sign in again
+            </div>
+          )}
           <GoogleLogin
             onSuccess={async (cred) => {
               if (!cred.credential) return;

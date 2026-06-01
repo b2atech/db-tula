@@ -231,6 +231,12 @@ export default function ComparisonResult() {
       const s = q.state.data?.status
       return s === 'Pending' || s === 'Running' ? 2000 : false
     },
+    // Completed/failed runs never change — cache forever in this session
+    staleTime: (q) => {
+      const s = q.state.data?.status
+      return s === 'Completed' || s === 'Failed' ? Infinity : 0
+    },
+    gcTime: 30 * 60 * 1000,
   })
 
   useEffect(() => {

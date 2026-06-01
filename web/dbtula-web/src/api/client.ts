@@ -16,6 +16,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
     ...init,
   });
+
+  // Session expired → clear token and redirect to login
+  if (res.status === 401 && path !== '/api/auth/google') {
+    tokenStore.clear();
+    window.location.href = '/login?expired=1';
+    return undefined as T;
+  }
+
+  // Server error → show toast
+  if (res.status >= 500) {
+    const text = await res.text().catch(() => res.statusText);
+    window.dispatchEvent(new CustomEvent('dbtula:toast', { detail: { id: Date.now(), text: `Server error: ${text || res.statusText}`, type: 'error' } }));
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw new Error(text || `HTTP ${res.status}`);

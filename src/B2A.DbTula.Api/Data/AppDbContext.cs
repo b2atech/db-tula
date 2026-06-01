@@ -53,6 +53,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(r => r.TargetDbId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(r => r.InitiatedBy).WithMany(u => u.Runs)
                 .HasForeignKey(r => r.InitiatedById).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(r => r.StartedAt);
+            e.HasIndex(r => r.Status);
         });
 
         b.Entity<SyncApplyLog>(e =>
