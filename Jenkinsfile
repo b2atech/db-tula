@@ -101,7 +101,7 @@ pipeline {
         stage('Deploy to dbtula.dgtula.com') {
             when { not { triggeredBy 'TimerTrigger' } }
             steps {
-                sshagent(credentials: ['DO_SSH_KEY']) {
+                sshagent(credentials: ['DO_FALLBACK_HOST']) {
                     sh '''
                         echo "=== Deploying API ==="
                         rsync -az --delete \
@@ -200,7 +200,7 @@ pipeline {
                 }
             }
             steps {
-                sshagent(credentials: ['DO_SSH_KEY']) {
+                sshagent(credentials: ['DO_FALLBACK_HOST']) {
                     sh '''
                         ssh -o StrictHostKeyChecking=no ${APP_SERVER} \
                             "sudo certbot renew --dry-run 2>&1" | \
