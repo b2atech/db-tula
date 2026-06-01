@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, Zap, ChevronDown, ChevronRight } from 'lucide-react'
+import { Download, Zap, ChevronDown, ChevronRight, Eye, Copy, X } from 'lucide-react'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Checkbox } from './ui/checkbox'
@@ -80,6 +80,8 @@ export function SyncPlanner({ runId, hasSafe, hasRisky, hasDestructive, syncScri
     } finally { setApplying(false) }
   }
 
+  const [showPreview, setShowPreview] = useState(false)
+
   const safeStmts = statements.filter(s => s.category === 'Safe')
   const riskyStmts = statements.filter(s => s.category === 'Risky')
   const destructiveStmts = statements.filter(s => s.category === 'Destructive')
@@ -99,9 +101,14 @@ export function SyncPlanner({ runId, hasSafe, hasRisky, hasDestructive, syncScri
           {hasRisky && <a href={syncScriptUrl(runId, 'risky')} download><Button variant="outline" size="sm" className="gap-1 text-amber-700 border-amber-200 hover:bg-amber-50 h-7 text-xs"><Download className="h-3 w-3" />Risky</Button></a>}
           {hasDestructive && <a href={syncScriptUrl(runId, 'destructive')} download><Button variant="outline" size="sm" className="gap-1 text-red-700 border-red-200 hover:bg-red-50 h-7 text-xs"><Download className="h-3 w-3" />Destructive</Button></a>}
           {selectedCount > 0 && (
-            <Button size="sm" onClick={applySelected} disabled={applying} className="gap-1 h-7 text-xs">
-              <Zap className="h-3 w-3" /> Apply {selectedCount} selected
-            </Button>
+            <>
+              <Button size="sm" variant="outline" onClick={() => setShowPreview(true)} className="gap-1 h-7 text-xs">
+                <Eye className="h-3 w-3" /> Preview {selectedCount}
+              </Button>
+              <Button size="sm" onClick={applySelected} disabled={applying} className="gap-1 h-7 text-xs">
+                <Zap className="h-3 w-3" /> Apply {selectedCount}
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -166,6 +173,34 @@ export function SyncPlanner({ runId, hasSafe, hasRisky, hasDestructive, syncScri
 
       {!hasSafe && !hasRisky && !hasDestructive && (
         <p className="px-4 py-6 text-center text-green-600 text-sm font-medium">✅ No changes needed — schemas are in sync</p>
+      )}
+
+      {/* Preview modal */}
+      {showPreview && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowPreview(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="font-semibold text-slate-900">SQL Preview — {selectedCount} selected statements</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const sql = safeStmts.filter(s => checked.has(s.id)).map(s => s.sql).join('\n\n')
+                    navigator.clipboard.writeText(sql)
+                  }}
+                  className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded px-2 py-1"
+                >
+                  <Copy className="h-3 w-3" /> Copy
+                </button>
+                <button onClick={() => setShowPreview(false)} className="text-slate-400 hover:text-slate-700">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <pre className="flex-1 overflow-auto p-6 text-xs font-mono bg-slate-900 text-emerald-300 rounded-b-xl">
+              {safeStmts.filter(s => checked.has(s.id)).map(s => `-- [${s.objectType}: ${s.objectName}] ${s.comment}\n${s.sql.trim()}`).join('\n\n')}
+            </pre>
+          </div>
+        </div>
       )}
     </div>
   )

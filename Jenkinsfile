@@ -127,8 +127,9 @@ pipeline {
             }
         }
 
-        // ── Always: nightly comparison (all 9 DBs) ───────────────────────
+        // ── Nightly cron only: comparison (all 9 DBs) ────────────────────
         stage('QA vs PROD') {
+            when { triggeredBy 'TimerTrigger' }
             steps {
                 sh 'mkdir -p gh-pages/qa-vs-prod'
                 withCredentials([
@@ -169,8 +170,9 @@ pipeline {
             }
         }
 
-        // ── Always: push comparison results into UI dashboard ────────────
+        // ── Nightly cron only: push comparison results to UI dashboard ───
         stage('Sync to UI Dashboard') {
+            when { triggeredBy 'TimerTrigger' }
             steps {
                 withCredentials([
                     string(credentialsId: 'DBTULA_API_KEY', variable: 'DBTULA_API_KEY'),
