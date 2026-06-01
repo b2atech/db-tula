@@ -4,6 +4,7 @@ pipeline {
     options {
         buildDiscarder(logRotator(daysToKeepStr: '7', numToKeepStr: '20'))
         timeout(time: 45, unit: 'MINUTES')
+        disableConcurrentBuilds()   // prevents @2 workspace clash / MSBuild conflicts
     }
 
     triggers {
@@ -44,6 +45,7 @@ pipeline {
                         --configuration Release \
                         --runtime linux-x64 \
                         --self-contained true \
+                        /m:1 \
                         -o ./publish/
                     chmod +x ./publish/B2A.DbTula.Cli
                 '''
@@ -55,10 +57,12 @@ pipeline {
             when { not { triggeredBy 'TimerTrigger' } }
             steps {
                 sh '''
-                    dotnet publish src/B2A.DbTula.Api/B2A.DbTula.Api.csproj \
+                    # /m:1 limits MSBuild to 1 worker — prevents OOM on low-RAM server
+                    MSBUILDDISABLENODEREUSE=1 dotnet publish src/B2A.DbTula.Api/B2A.DbTula.Api.csproj \
                         --configuration Release \
                         --runtime linux-x64 \
                         --self-contained false \
+                        /m:1 \
                         -o ./publish-api/
                 '''
             }
