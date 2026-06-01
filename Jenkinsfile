@@ -72,7 +72,7 @@ pipeline {
                 ]) {
                     sh '''
                         cd web/dbtula-web
-                        npm ci --prefer-offline
+                        npm install
                         npm run build
                     '''
                 }

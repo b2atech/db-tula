@@ -167,6 +167,29 @@ public class ComparisonsController(
         return Ok(new ApplySafeResult(successes, failures, errors));
     }
 
+    [HttpPost("{id:guid}/retry")]
+    [Authorize(Roles = "Admin,Operator")]
+    public async Task<IActionResult> Retry(Guid id)
+    {
+        var original = await db.ComparisonRuns.FindAsync(id);
+        if (original is null) return NotFound();
+        if (original.Status == RunStatus.Running || original.Status == RunStatus.Pending)
+            return BadRequest("Run is still in progress");
+
+        var retry = new ComparisonRun
+        {
+            ProfileId = original.ProfileId,
+            SourceDbId = original.SourceDbId,
+            TargetDbId = original.TargetDbId,
+            InitiatedById = GetUserId()
+        };
+        db.ComparisonRuns.Add(retry);
+        await db.SaveChangesAsync();
+        await queue.Writer.WriteAsync(retry.Id);
+
+        return Accepted(new { runId = retry.Id });
+    }
+
     [HttpGet("{id:guid}/statements")]
     public async Task<IActionResult> GetStatements(Guid id, [FromQuery] string? category = null)
     {

@@ -64,6 +64,7 @@ builder.Services.AddScoped<AuthService>();
 var channel = Channel.CreateUnbounded<Guid>(new UnboundedChannelOptions { SingleReader = true });
 builder.Services.AddSingleton(channel);
 builder.Services.AddHostedService<ComparisonWorker>();
+builder.Services.AddHostedService<StuckRunCleanupService>();
 
 // ── SignalR ───────────────────────────────────────────────────────────────────
 builder.Services.AddSignalR();

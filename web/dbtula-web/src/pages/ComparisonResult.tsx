@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import * as signalR from '@microsoft/signalr'
 import { X, ChevronDown, ChevronRight } from 'lucide-react'
@@ -218,6 +218,7 @@ function ResultTable({ items, onSelect }: { items: ComparisonResultItem[]; onSel
 
 export default function ComparisonResult() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const qc = useQueryClient()
   const [logs, setLogs] = useState<string[]>([])
@@ -353,10 +354,23 @@ export default function ComparisonResult() {
       )}
 
       {run?.status === 'Failed' && (
-        <Card>
-          <CardContent className="p-6 text-red-600">
-            <p className="font-medium">Comparison failed</p>
-            <p className="text-sm mt-1">{run.errorMessage}</p>
+        <Card className="border-red-200">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-medium text-red-700">Comparison failed</p>
+                <p className="text-sm text-red-500 mt-1">{run.errorMessage}</p>
+              </div>
+              <button
+                onClick={async () => {
+                  const { runId } = await api.comparisons.retry(id!)
+                  navigate(`/results/${runId}`)
+                }}
+                className="shrink-0 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700"
+              >
+                ↺ Retry
+              </button>
+            </div>
           </CardContent>
         </Card>
       )}

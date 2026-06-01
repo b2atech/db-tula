@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using B2A.DbTula.Cli.Services;
 using System.Threading.Channels;
 using B2A.DbTula.Api.Data;
 using B2A.DbTula.Api.Hubs;
@@ -125,6 +126,11 @@ public class ComparisonWorker(
 
             await db.SaveChangesAsync(ct);
             await hub.Clients.Group($"run-{runId}").SendAsync("done", new { type = "done", status = "Completed", summary }, ct);
+
+            // Email admins if drift detected
+            var drift = (summary.mismatch + summary.missingInTarget + summary.missingInSource);
+            if (drift > 0)
+                await TrySendDriftEmailAsync(db, run, results, summary, ct);
         }
         catch (Exception ex)
         {
@@ -134,6 +140,39 @@ public class ComparisonWorker(
             run.CompletedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
             await hub.Clients.Group($"run-{runId}").SendAsync("done", new { type = "done", status = "Failed", error = ex.Message }, ct);
+        }
+    }
+
+    private async Task TrySendDriftEmailAsync(AppDbContext db, ComparisonRun run, IList<B2A.DbTula.Core.Models.ComparisonResult> results, dynamic summary, CancellationToken ct)
+    {
+        try
+        {
+            var emailConfig = EmailService.ReadFromEnvironment();
+            if (emailConfig is null) return;
+
+            // Override To: with all Admin emails from DB
+            var adminEmails = await db.Users
+                .Where(u => u.Role == UserRole.Admin)
+                .Select(u => u.Email)
+                .ToListAsync(ct);
+            if (!adminEmails.Any()) return;
+
+            emailConfig = emailConfig with { To = adminEmails.ToArray() };
+
+            var title = run.Profile?.Name ?? $"{run.SourceDb?.Name} → {run.TargetDb?.Name}";
+            var body = EmailService.BuildDriftEmailBody(
+                title, run.SourceDb?.Name ?? "Source", run.TargetDb?.Name ?? "Target",
+                results, summary.match, summary.mismatch, summary.missingInTarget, summary.missingInSource);
+
+            await EmailService.SendDriftReportAsync(emailConfig,
+                $"⚠️ Schema Drift — {title} ({summary.mismatch + summary.missingInTarget + summary.missingInSource} issue(s))",
+                body, null);
+
+            logger.LogInformation("Drift email sent for run {RunId}", run.Id);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send drift email for run {RunId}", run.Id);
         }
     }
 

@@ -82,6 +82,8 @@ export const api = {
       request<SyncStatementItem[]>(`/api/comparisons/${id}/statements${category ? `?category=${category}` : ''}`),
     toggleStatement: (id: string, sid: string, isApproved: boolean) =>
       request<void>(`/api/comparisons/${id}/statements/${sid}`, { method: 'PATCH', body: JSON.stringify({ isApproved }) }),
+    retry: (id: string) =>
+      request<{ runId: string }>(`/api/comparisons/${id}/retry`, { method: 'POST' }),
     applyApproved: (id: string) =>
       request<ApplySafeResult>(`/api/comparisons/${id}/apply-approved`, { method: 'POST' }),
   },
