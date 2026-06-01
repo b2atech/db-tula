@@ -80,6 +80,20 @@
 
 ---
 
+## Phase 10 — 16 Improvements (2026-06-01)
+
+All items from IMPROVEMENTS.md implemented across 4 batches.
+
+**Batch 1 — Tech Debt:** Secrets→env vars (systemd), MemoryMax=600M, DB indexes (StartedAt/Status), React ErrorBoundary + Toast, staleTime=Infinity on completed runs, 401→/login?expired=1 redirect + expiry banner on login page
+
+**Batch 2 — Reliability:** StuckRunCleanupService (marks runs Failed after 15min, runs every 5min), POST /api/comparisons/{id}/retry + Retry button on UI, email notification to admins on drift (reuses EmailService from CLI), session auto-redirect on expiry
+
+**Batch 3 — UX:** Dark mode toggle (sun/moon in sidebar, localStorage persisted), collapsible sidebar (w-60↔w-16 with tooltips, localStorage persisted), History page search + status/date filters, SyncPlanner Preview modal (show+copy SQL before applying), Jenkins nightly-only for comparison+email (not on every commit), react-is peer dep fix, npm install not npm ci
+
+**Batch 4 — Features:** BatchRun model + /api/batch-runs (Run All queues all profiles, progress bar), /api/databases/export-batch-config (Admin, downloads batch JSON), CronExpression on ComparisonProfile, Serilog compact JSON→stdout→journal (same as other Dhanman services for Grafana/Loki), /api/profiles/{id}/pending-sync endpoint, certbot monthly dry-run in Jenkins (1st of month), merged duplicate cron trigger fix
+
+**DB migrations run:** AddPerformanceIndexes (v4 SQL), Batch4Features (v5 SQL)
+
 ## Phase 9 — Production Deployment (2026-06-01)
 
 | # | Task | Status | Notes |
