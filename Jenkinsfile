@@ -112,7 +112,6 @@ pipeline {
 
                     echo "=== Deploying React UI ==="
                     cp -r ./web/dbtula-web/dist/. /var/www/dbtula-web/
-                    chown -R www-data:www-data /var/www/dbtula-web
 
                     echo "=== Restarting API ==="
                     sudo systemctl restart dbtula-api
