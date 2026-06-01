@@ -96,6 +96,40 @@ public class DatabasesController(AppDbContext db, CredentialService creds) : Con
         }
     }
 
+    [HttpGet("export-batch-config")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> ExportBatchConfig()
+    {
+        var profiles = await db.Profiles
+            .Include(p => p.SourceDb)
+            .Include(p => p.TargetDb)
+            .OrderBy(p => p.Name)
+            .ToListAsync();
+
+        var comparisons = profiles.Select(p => new
+        {
+            name = p.Name,
+            source = creds.Decrypt(p.SourceDb.ConnectionStringEncrypted),
+            target = creds.Decrypt(p.TargetDb.ConnectionStringEncrypted),
+            sourceLabel = p.SourceDb.Environment.ToString(),
+            targetLabel = p.TargetDb.Environment.ToString(),
+            outputFile = $"gh-pages/{p.Name.ToLower().Replace(" ", "-").Replace("·", "").Trim()}.html",
+            generateSync = true,
+            syncOutputFile = $"gh-pages/{p.Name.ToLower().Replace(" ", "-").Replace("·", "").Trim()}-sync.sql"
+        });
+
+        var config = new
+        {
+            title = "Dhanman Schema — QA vs PROD",
+            comparisons
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(config,
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+        return File(System.Text.Encoding.UTF8.GetBytes(json), "application/json", "batch-config-export.json");
+    }
+
     private Guid GetUserId() =>
         Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value!);

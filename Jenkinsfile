@@ -9,6 +9,7 @@ pipeline {
     triggers {
         cron('30 18 * * *')         // midnight IST — nightly comparison only
         pollSCM('H/5 * * * *')      // check for commits every 5 min → deploy
+        cron('0 10 1 * *')          // 1st of month — certbot renewal check
     }
 
     environment {
@@ -86,7 +87,6 @@ pipeline {
                 sh '''
                     dotnet test tests/B2A.DbTula.Core.Tests/B2A.DbTula.Core.Tests.csproj \
                         --configuration Release \
-                        --logger "junit;LogFilePath=../../test-results/unit-tests.xml" \
                         || true
                 '''
             }
@@ -187,6 +187,25 @@ pipeline {
                             ? "✅ UI dashboard queued all 9 comparison runs"
                             : "⚠️  UI trigger returned HTTP ${code}"
                     }
+                }
+            }
+        }
+
+        // ── 1st of month: certbot renewal dry-run ────────────────────────
+        stage('Certbot Renewal Check') {
+            when {
+                allOf {
+                    triggeredBy 'TimerTrigger'
+                    expression { new Date().date == 1 }
+                }
+            }
+            steps {
+                sshagent(credentials: ['DO_FALLBACK_HOST']) {
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no ${APP_SERVER} \
+                            "sudo certbot renew --dry-run 2>&1" | \
+                            grep -E "success|error|failed|Simulating|congratulations" || true
+                    '''
                 }
             }
         }

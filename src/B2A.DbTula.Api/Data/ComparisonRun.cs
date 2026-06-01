@@ -8,6 +8,7 @@ public class ComparisonRun
 
     public Guid? ProfileId { get; set; }
     public ComparisonProfile? Profile { get; set; }
+    public Guid? BatchRunId { get; set; }
 
     public Guid SourceDbId { get; set; }
     public RegisteredDatabase SourceDb { get; set; } = null!;

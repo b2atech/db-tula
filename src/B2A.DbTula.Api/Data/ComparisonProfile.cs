@@ -13,6 +13,7 @@ public class ComparisonProfile
     public RegisteredDatabase TargetDb { get; set; } = null!;
 
     public bool IgnoreOwnership { get; set; } = true;
+    public string? CronExpression { get; set; }
 
     public Guid CreatedById { get; set; }
     public AppUser CreatedBy { get; set; } = null!;

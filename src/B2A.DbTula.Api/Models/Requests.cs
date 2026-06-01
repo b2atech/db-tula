@@ -18,7 +18,8 @@ public record CreateProfileRequest(
     string? Description,
     Guid SourceDbId,
     Guid TargetDbId,
-    bool IgnoreOwnership
+    bool IgnoreOwnership,
+    string? CronExpression = null
 );
 
 public record StartComparisonRequest(Guid SourceDbId, Guid TargetDbId);

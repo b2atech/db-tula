@@ -25,6 +25,7 @@ function ProfileForm({
     sourceDbId: initial?.sourceDbId ?? '',
     targetDbId: initial?.targetDbId ?? '',
     ignoreOwnership: initial?.ignoreOwnership ?? true,
+    cronExpression: initial?.cronExpression ?? null,
   })
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
@@ -96,15 +97,22 @@ export default function Profiles() {
   const [editing, setEditing] = useState<Profile | null>(null)
   const [runningAll, setRunningAll] = useState(false)
 
+  const [activeBatch, setActiveBatch] = useState<{ id: string; total: number; done: number } | null>(null)
+
   const runAll = async () => {
     if (!confirm(`Run all ${profiles.length} profiles? This will queue ${profiles.length} comparisons.`)) return
     setRunningAll(true)
-    for (const p of profiles) {
-      try { await api.profiles.run(p.id) } catch { /* continue */ }
-    }
+    const { batchRunId, totalRuns } = await api.batchRuns.runAll()
+    setActiveBatch({ id: batchRunId, total: totalRuns, done: 0 })
     qc.invalidateQueries({ queryKey: ['comparisons'] })
     qc.invalidateQueries({ queryKey: ['profiles'] })
     setRunningAll(false)
+    // Poll batch status
+    const poll = setInterval(async () => {
+      const status = await api.batchRuns.get(batchRunId)
+      setActiveBatch({ id: batchRunId, total: status.totalRuns, done: status.completedRuns + status.failedRuns })
+      if (status.isComplete) { clearInterval(poll); setTimeout(() => setActiveBatch(null), 5000) }
+    }, 3000)
   }
 
   const deleteMutation = useMutation({
@@ -138,11 +146,30 @@ export default function Profiles() {
           <Button variant="outline" onClick={runAll} disabled={runningAll} className="gap-2">
             {runningAll ? 'Running...' : '▶ Run All'}
           </Button>
+          <a href="/api/databases/export-batch-config" download>
+            <Button variant="outline" className="gap-2">↓ Export Config</Button>
+          </a>
           <Button onClick={() => { setEditing(null); setShowForm(true) }} className="gap-2">
             <Plus className="h-4 w-4" /> New Profile
           </Button>
         </div>
       </div>
+
+      {/* Batch progress banner */}
+      {activeBatch && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-center gap-4">
+          <div className="flex-1">
+            <p className="text-sm font-medium text-indigo-800">Running all profiles…</p>
+            <div className="mt-1 h-2 bg-indigo-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-500 transition-all"
+                style={{ width: `${(activeBatch.done / activeBatch.total) * 100}%` }}
+              />
+            </div>
+          </div>
+          <span className="text-indigo-700 font-semibold text-sm">{activeBatch.done}/{activeBatch.total}</span>
+        </div>
+      )}
 
       {isLoading && <p className="text-slate-400 text-sm">Loading...</p>}
 

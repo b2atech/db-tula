@@ -30,7 +30,7 @@ public class ProfilesController(AppDbContext db, Channel<Guid> queue) : Controll
                 p.Id, p.Name, p.Description,
                 p.SourceDbId, p.SourceDb.Name,
                 p.TargetDbId, p.TargetDb.Name,
-                p.IgnoreOwnership, p.CreatedAt,
+                p.IgnoreOwnership, p.CronExpression, p.CreatedAt,
                 last?.Id, last?.Status.ToString(), last?.StartedAt, last?.SummaryJson);
         });
 
@@ -49,6 +49,7 @@ public class ProfilesController(AppDbContext db, Channel<Guid> queue) : Controll
             SourceDbId = req.SourceDbId,
             TargetDbId = req.TargetDbId,
             IgnoreOwnership = req.IgnoreOwnership,
+            CronExpression = req.CronExpression,
             CreatedById = userId
         };
         db.Profiles.Add(profile);
@@ -67,6 +68,7 @@ public class ProfilesController(AppDbContext db, Channel<Guid> queue) : Controll
         p.SourceDbId = req.SourceDbId;
         p.TargetDbId = req.TargetDbId;
         p.IgnoreOwnership = req.IgnoreOwnership;
+        p.CronExpression = req.CronExpression;
         await db.SaveChangesAsync();
         return Ok();
     }
@@ -102,6 +104,33 @@ public class ProfilesController(AppDbContext db, Channel<Guid> queue) : Controll
         await queue.Writer.WriteAsync(run.Id);
 
         return Accepted(new { runId = run.Id });
+    }
+
+    [HttpGet("{id:guid}/pending-sync")]
+    public async Task<IActionResult> PendingSync(Guid id)
+    {
+        var profile = await db.Profiles.Include(p => p.TargetDb).FirstOrDefaultAsync(p => p.Id == id);
+        if (profile is null) return NotFound();
+
+        // All unapplied safe statements across completed runs for this profile
+        // Deduplicated: for each objectName keep only the latest run's statement
+        var statements = await db.SyncStatements
+            .Where(s => s.Category == "Safe" && !s.IsApplied
+                && db.ComparisonRuns.Any(r => r.Id == s.ComparisonRunId
+                    && r.ProfileId == id && r.Status == RunStatus.Completed))
+            .Join(db.ComparisonRuns, s => s.ComparisonRunId, r => r.Id,
+                (s, r) => new { s, r.StartedAt })
+            .OrderByDescending(x => x.StartedAt)
+            .Select(x => x.s)
+            .ToListAsync();
+
+        // Deduplicate by objectName: keep latest
+        var deduped = statements
+            .GroupBy(s => $"{s.ObjectType}:{s.ObjectName}")
+            .Select(g => g.First())
+            .ToList();
+
+        return Ok(new { profileId = id, pendingCount = deduped.Count, statements = deduped });
     }
 
     private Guid GetUserId() =>

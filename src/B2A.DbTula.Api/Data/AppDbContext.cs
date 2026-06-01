@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<DbSyncStatement> SyncStatements => Set<DbSyncStatement>();
     public DbSet<AllowedEmail> AllowedEmails => Set<AllowedEmail>();
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+    public DbSet<BatchRun> BatchRuns => Set<BatchRun>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -65,6 +66,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(l => l.AppliedById).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(l => l.TargetDb).WithMany()
                 .HasForeignKey(l => l.TargetDbId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        b.Entity<BatchRun>(e =>
+        {
+            e.HasOne(b => b.InitiatedBy).WithMany()
+                .HasForeignKey(b => b.InitiatedById).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(b => b.StartedAt);
         });
 
         b.Entity<AllowedEmail>(e =>

@@ -70,6 +70,13 @@ export const api = {
     delete: (id: string) => request<void>(`/api/profiles/${id}`, { method: 'DELETE' }),
     run: (id: string) =>
       request<{ runId: string }>(`/api/profiles/${id}/run`, { method: 'POST' }),
+    pendingSync: (id: string) =>
+      request<{ profileId: string; pendingCount: number }>(`/api/profiles/${id}/pending-sync`),
+  },
+  batchRuns: {
+    runAll: () => request<{ batchRunId: string; totalRuns: number }>('/api/batch-runs', { method: 'POST' }),
+    get: (id: string) => request<BatchRunStatus>(`/api/batch-runs/${id}`),
+    list: () => request<BatchRunStatus[]>('/api/batch-runs'),
   },
   comparisons: {
     list: (page = 1) => request<ComparisonRun[]>(`/api/comparisons?page=${page}`),
@@ -130,7 +137,7 @@ export interface Profile {
   id: string; name: string; description: string | null;
   sourceDbId: string; sourceDbName: string;
   targetDbId: string; targetDbName: string;
-  ignoreOwnership: boolean; createdAt: string;
+  ignoreOwnership: boolean; cronExpression: string | null; createdAt: string;
   lastRunId: string | null; lastRunStatus: string | null;
   lastRunAt: string | null; lastRunSummary: string | null;
 }
@@ -138,6 +145,7 @@ export interface Profile {
 export interface CreateProfileRequest {
   name: string; description: string | null;
   sourceDbId: string; targetDbId: string; ignoreOwnership: boolean;
+  cronExpression: string | null;
 }
 
 export interface ComparisonRun {
@@ -193,6 +201,12 @@ export interface DbHealth {
   sourceDb: string; targetDb: string;
   status: HealthStatus; totalDrift: number;
   lastRunAt: string | null; lastRunId: string | null;
+}
+
+export interface BatchRunStatus {
+  id: string; name: string; totalRuns: number;
+  completedRuns: number; failedRuns: number; runningRuns: number;
+  startedAt: string; completedAt: string | null; isComplete: boolean;
 }
 
 export interface Summary {

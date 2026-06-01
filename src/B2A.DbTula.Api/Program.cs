@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.DataProtection;
+using Serilog;
 using System.Text;
 using System.Threading.Channels;
 using B2A.DbTula.Api.Data;
@@ -10,7 +11,18 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
+// Serilog — compact JSON to stdout (systemd journal), same as other Dhanman services
+// Grafana/Loki picks this up via promtail reading the journal
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("service", "dbtula-api")
+    .WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter())
+    .CreateLogger();
+
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 
 // ── Database ──────────────────────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(o =>

@@ -23,8 +23,8 @@ public record ProfileDto(
     Guid TargetDbId,
     string TargetDbName,
     bool IgnoreOwnership,
+    string? CronExpression,
     DateTime CreatedAt,
-    // latest run info
     Guid? LastRunId,
     string? LastRunStatus,
     DateTime? LastRunAt,
