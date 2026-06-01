@@ -7,9 +7,9 @@ pipeline {
     }
 
     triggers {
-        cron('30 18 * * *')         // midnight IST — nightly comparison only
+        // midnight IST daily (nightly comparison) + 1st of month 10am (certbot check)
+        cron('30 18 * * *\n0 10 1 * *')
         pollSCM('H/5 * * * *')      // check for commits every 5 min → deploy
-        cron('0 10 1 * *')          // 1st of month — certbot renewal check
     }
 
     environment {
