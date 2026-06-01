@@ -102,32 +102,23 @@ pipeline {
         }
 
         // ── On commit only: deploy to dbtula.dgtula.com ───────────────────
+        // Jenkins runs on the same server — copy files directly, no SSH
         stage('Deploy to dbtula.dgtula.com') {
             when { not { triggeredBy 'TimerTrigger' } }
             steps {
-                withCredentials([string(credentialsId: 'DO_FALLBACK_HOST', variable: 'DEPLOY_HOST')]) {
-                    sshagent(credentials: ['DO_SSH_KEY']) {
-                        sh '''
-                            echo "=== Deploying API ==="
-                            rsync -az --delete \
-                                -e "ssh -o StrictHostKeyChecking=no" \
-                                ./publish-api/ ubuntu@${DEPLOY_HOST}:/var/www/dbtula-api/
+                sh '''
+                    echo "=== Deploying API ==="
+                    cp -r ./publish-api/. /var/www/dbtula-api/
 
-                            echo "=== Deploying React UI ==="
-                            ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} \
-                                "sudo chown -R ubuntu:ubuntu /var/www/dbtula-web"
-                            rsync -az --delete \
-                                -e "ssh -o StrictHostKeyChecking=no" \
-                                ./web/dbtula-web/dist/ ubuntu@${DEPLOY_HOST}:/var/www/dbtula-web/
-                            ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} \
-                                "sudo chown -R www-data:www-data /var/www/dbtula-web"
+                    echo "=== Deploying React UI ==="
+                    cp -r ./web/dbtula-web/dist/. /var/www/dbtula-web/
+                    chown -R www-data:www-data /var/www/dbtula-web
 
-                            echo "=== Restarting API ==="
-                            ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} \
-                                "sudo systemctl restart dbtula-api && sleep 3 && sudo systemctl is-active dbtula-api"
-                        '''
-                    }
-                }
+                    echo "=== Restarting API ==="
+                    sudo systemctl restart dbtula-api
+                    sleep 3
+                    sudo systemctl is-active dbtula-api
+                '''
             }
         }
 
@@ -204,15 +195,10 @@ pipeline {
                 }
             }
             steps {
-                withCredentials([string(credentialsId: 'DO_FALLBACK_HOST', variable: 'DEPLOY_HOST')]) {
-                    sshagent(credentials: ['DO_SSH_KEY']) {
-                        sh '''
-                            ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} \
-                                "sudo certbot renew --dry-run 2>&1" | \
-                                grep -E "success|error|failed|Simulating|congratulations" || true
-                        '''
-                    }
-                }
+                sh '''
+                    sudo certbot renew --dry-run 2>&1 | \
+                        grep -E "success|error|failed|Simulating|congratulations" || true
+                '''
             }
         }
 
