@@ -101,6 +101,19 @@ pipeline {
             }
         }
 
+        // ── On commit only: apply DB migrations ──────────────────────────
+        stage('Apply DB Migrations') {
+            when { not { triggeredBy 'TimerTrigger' } }
+            steps {
+                sh '''
+                    dotnet ef database update \
+                        --project src/B2A.DbTula.Api/B2A.DbTula.Api.csproj \
+                        --no-build \
+                        || echo "Migration warning — check DB connectivity"
+                '''
+            }
+        }
+
         // ── On commit only: deploy to dbtula.dgtula.com ───────────────────
         // Jenkins runs on the same server — copy files directly, no SSH
         stage('Deploy to dbtula.dgtula.com') {

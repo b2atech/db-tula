@@ -29,13 +29,21 @@ public class AuthController(AuthService authService, IConfiguration config, AppD
             return Unauthorized("Invalid Google token");
         }
 
-        // Whitelist check — DB-backed (empty table = allow anyone)
-        var anyAllowed = await db.AllowedEmails.AnyAsync();
-        if (anyAllowed)
+        // Whitelist check: DB table first, fallback to config if table is empty
+        var anyInDb = await db.AllowedEmails.AnyAsync();
+        if (anyInDb)
         {
             var isAllowed = await db.AllowedEmails
                 .AnyAsync(e => e.Email.ToLower() == payload.Email.ToLower());
             if (!isAllowed) return Forbid();
+        }
+        else
+        {
+            // Fallback to config (used when DB table is empty — prevents full lockout)
+            var configList = config.GetSection("Auth:AllowedEmails").Get<string[]>() ?? [];
+            if (configList.Length > 0 &&
+                !configList.Contains(payload.Email, StringComparer.OrdinalIgnoreCase))
+                return Forbid();
         }
 
         var (user, _) = await authService.FindOrCreateUserAsync(payload);

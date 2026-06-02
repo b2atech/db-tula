@@ -90,12 +90,17 @@ public class ComparisonWorker(
                 missingInSource = results.Count(r => r.Status == Core.Enums.ComparisonStatus.MissingInSource),
             };
 
-            // Serialize with camelCase + string enums so frontend can parse directly
             var jsonOpts = new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                 Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
             };
+
+            // Strip SideBySideDiffHtml before storing — can be megabytes per object (causes ABRT).
+            // The diff modal falls back to SourceScript/TargetScript which are retained.
+            foreach (var r in results)
+                r.SideBySideDiffHtml = null;
+
             run.ResultJson = JsonSerializer.Serialize(results, jsonOpts);
             run.SummaryJson = JsonSerializer.Serialize(summary);
             run.Status = RunStatus.Completed;
