@@ -120,6 +120,8 @@ pipeline {
             when { not { triggeredBy 'TimerTrigger' } }
             steps {
                 sh '''
+                    umask 022
+
                     echo "=== Deploying API ==="
                     cp -r ./publish-api/. /var/www/dbtula-api/
 
