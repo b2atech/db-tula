@@ -1,6 +1,22 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, Zap, ChevronDown, ChevronRight, Eye, Copy, X } from 'lucide-react'
+import { tokenStore } from '../api/client'
+
+async function downloadScript(runId: string, category: string) {
+  const token = tokenStore.get()
+  const res = await fetch(`/api/comparisons/${runId}/sync-script?category=${category}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  })
+  if (!res.ok) return
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `sync-${category}-${runId.slice(0, 8)}.sql`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Checkbox } from './ui/checkbox'
@@ -41,12 +57,11 @@ function StatementRow({
   )
 }
 
-export function SyncPlanner({ runId, hasSafe, hasRisky, hasDestructive, syncScriptUrl }: {
+export function SyncPlanner({ runId, hasSafe, hasRisky, hasDestructive }: {
   runId: string
   hasSafe: boolean
   hasRisky: boolean
   hasDestructive: boolean
-  syncScriptUrl: (id: string, cat: 'safe' | 'risky' | 'destructive') => string
 }) {
   const qc = useQueryClient()
   const [applying, setApplying] = useState(false)
@@ -97,16 +112,16 @@ export function SyncPlanner({ runId, hasSafe, hasRisky, hasDestructive, syncScri
           {appliedCount > 0 && <Badge variant="success">{appliedCount} applied</Badge>}
         </div>
         <div className="flex items-center gap-2">
-          {hasSafe && <a href={syncScriptUrl(runId, 'safe')} download><Button variant="outline" size="sm" className="gap-1 text-green-700 border-green-200 hover:bg-green-50 h-7 text-xs"><Download className="h-3 w-3" />Safe</Button></a>}
-          {hasRisky && <a href={syncScriptUrl(runId, 'risky')} download><Button variant="outline" size="sm" className="gap-1 text-amber-700 border-amber-200 hover:bg-amber-50 h-7 text-xs"><Download className="h-3 w-3" />Risky</Button></a>}
-          {hasDestructive && <a href={syncScriptUrl(runId, 'destructive')} download><Button variant="outline" size="sm" className="gap-1 text-red-700 border-red-200 hover:bg-red-50 h-7 text-xs"><Download className="h-3 w-3" />Destructive</Button></a>}
+          {hasSafe && <Button variant="outline" size="sm" onClick={() => downloadScript(runId, 'safe')} className="gap-1 text-green-700 border-green-200 hover:bg-green-50 h-7 text-xs"><Download className="h-3 w-3" />Safe</Button>}
+          {hasRisky && <Button variant="outline" size="sm" onClick={() => downloadScript(runId, 'risky')} className="gap-1 text-amber-700 border-amber-200 hover:bg-amber-50 h-7 text-xs"><Download className="h-3 w-3" />Risky</Button>}
+          {hasDestructive && <Button variant="outline" size="sm" onClick={() => downloadScript(runId, 'destructive')} className="gap-1 text-red-700 border-red-200 hover:bg-red-50 h-7 text-xs"><Download className="h-3 w-3" />Destructive</Button>}
           {selectedCount > 0 && (
             <>
               <Button size="sm" variant="outline" onClick={() => setShowPreview(true)} className="gap-1 h-7 text-xs">
-                <Eye className="h-3 w-3" /> Preview {selectedCount}
+                <Eye className="h-3 w-3" /> Preview
               </Button>
-              <Button size="sm" onClick={applySelected} disabled={applying} className="gap-1 h-7 text-xs">
-                <Zap className="h-3 w-3" /> Apply {selectedCount}
+              <Button size="sm" onClick={applySelected} disabled={applying} className="gap-1 h-7 text-xs bg-green-600 hover:bg-green-700">
+                <Zap className="h-3 w-3" /> Apply {selectedCount} Safe
               </Button>
             </>
           )}

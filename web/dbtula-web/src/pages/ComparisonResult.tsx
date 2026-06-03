@@ -349,7 +349,6 @@ export default function ComparisonResult() {
           hasSafe={!!run.hasSafeScript}
           hasRisky={!!run.hasRiskyScript}
           hasDestructive={!!run.hasDestructiveScript}
-          syncScriptUrl={api.comparisons.syncScriptUrl}
         />
       )}
 
