@@ -108,7 +108,7 @@ pipeline {
                 sh '''
                     dotnet ef database update \
                         --project src/B2A.DbTula.Api/B2A.DbTula.Api.csproj \
-                        --no-build \
+                        --configuration Release \
                         || echo "Migration warning — check DB connectivity"
                 '''
             }
