@@ -282,74 +282,93 @@ export default function ComparisonResult() {
   ]
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">
-          {run ? `${run.sourceDbName} → ${run.targetDbName}` : 'Loading...'}
-        </h1>
-        {run && (
-          <p className="text-slate-500 text-sm mt-0.5">
-            {run.profileName && <span className="mr-2 text-indigo-600 font-medium">{run.profileName}</span>}
-            Started {new Date(run.startedAt).toLocaleString()}
-            {run.completedAt && ` · ${Math.round((new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)}s`}
-          </p>
+    <div className="flex flex-col gap-5">
+      {/* ── Top section: full width ── */}
+      <div className="space-y-4">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {run ? `${run.sourceDbName} → ${run.targetDbName}` : 'Loading...'}
+          </h1>
+          {run && (
+            <p className="text-slate-500 text-sm mt-0.5">
+              {run.profileName && <span className="mr-2 text-indigo-600 font-medium">{run.profileName}</span>}
+              Started {new Date(run.startedAt).toLocaleString()}
+              {run.completedAt && ` · ${Math.round((new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)}s`}
+            </p>
+          )}
+        </div>
+
+        {/* Live log */}
+        {(isRunning || logs.length > 0) && (
+          <div ref={logsRef} className="bg-slate-900 text-emerald-400 rounded-xl p-4 font-mono text-xs h-44 overflow-auto">
+            {logs.map((l, i) => <div key={i}>{l}</div>)}
+            {isRunning && <div className="animate-pulse mt-1">▋</div>}
+          </div>
+        )}
+
+        {/* Summary cards — inline row */}
+        {summary && (
+          <div className="flex items-center gap-3">
+            {summaryCards.map(c => (
+              <div key={c.label} className={`rounded-xl border px-5 py-3 text-center flex-1 ${c.cls}`}>
+                <div className="text-2xl font-bold">{c.value}</div>
+                <div className="text-xs mt-0.5 font-medium">{c.label}</div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Live log */}
-      {(isRunning || logs.length > 0) && (
-        <div ref={logsRef} className="bg-slate-900 text-emerald-400 rounded-xl p-4 font-mono text-xs h-44 overflow-auto">
-          {logs.map((l, i) => <div key={i}>{l}</div>)}
-          {isRunning && <div className="animate-pulse mt-1">▋</div>}
-        </div>
-      )}
+      {/* 50/50 side-by-side: Results | Sync Planner */}
+      {(types.length > 0 || run?.status === 'Completed') && (
+        <div className="grid grid-cols-2 gap-5 items-start">
 
-      {/* Summary cards */}
-      {summary && (
-        <div className="flex items-center gap-3 flex-wrap">
-          {summaryCards.map(c => (
-            <div key={c.label} className={`rounded-xl border px-5 py-3 text-center min-w-[120px] ${c.cls}`}>
-              <div className="text-2xl font-bold">{c.value}</div>
-              <div className="text-xs mt-0.5 font-medium">{c.label}</div>
+          {/* Left — Results */}
+          <div className="min-w-0 rounded-xl border border-slate-200 bg-white overflow-hidden">
+            {/* Matching header height */}
+            <div className="px-4 py-3 border-b bg-slate-50">
+              <span className="font-semibold text-slate-800 text-sm">Comparison Results</span>
             </div>
-          ))}
+            {types.length > 0 && (
+              <div className="p-3">
+                <Tabs defaultValue={types[0]}>
+                  <TabsList className="flex-wrap h-auto gap-1">
+                    {types.map(t => {
+                      const items = byType[t]
+                      const hasDrift = items.some(r => statusKey(r.status) !== 'match')
+                      return (
+                        <TabsTrigger key={t} value={t} className="gap-1.5">
+                          {TYPE_LABELS[t] ?? t}
+                          <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${hasDrift ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                            {items.length}
+                          </span>
+                        </TabsTrigger>
+                      )
+                    })}
+                  </TabsList>
+                  {types.map(t => (
+                    <TabsContent key={t} value={t}>
+                      <ResultTable items={byType[t]} onSelect={setSelectedItem} />
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              </div>
+            )}
+          </div>
+
+          {/* Right — Sync Planner */}
+          <div>
+            {run?.status === 'Completed' && user?.role === 'Admin' && (
+              <SyncPlanner
+                runId={id!}
+                hasSafe={!!run.hasSafeScript}
+                hasRisky={!!run.hasRiskyScript}
+                hasDestructive={!!run.hasDestructiveScript}
+              />
+            )}
+          </div>
         </div>
-      )}
-
-      {/* Tabs by object type */}
-      {types.length > 0 && (
-        <Tabs defaultValue={types[0]}>
-          <TabsList className="flex-wrap h-auto gap-1">
-            {types.map(t => {
-              const items = byType[t]
-              const hasDrift = items.some(r => statusKey(r.status) !== 'match')
-              return (
-                <TabsTrigger key={t} value={t} className="gap-1.5">
-                  {TYPE_LABELS[t] ?? t}
-                  <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${hasDrift ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                    {items.length}
-                  </span>
-                </TabsTrigger>
-              )
-            })}
-          </TabsList>
-          {types.map(t => (
-            <TabsContent key={t} value={t}>
-              <ResultTable items={byType[t]} onSelect={setSelectedItem} />
-            </TabsContent>
-          ))}
-        </Tabs>
-      )}
-
-      {/* Sync Planner — statement-level approve/skip */}
-      {run?.status === 'Completed' && user?.role === 'Admin' && (
-        <SyncPlanner
-          runId={id!}
-          hasSafe={!!run.hasSafeScript}
-          hasRisky={!!run.hasRiskyScript}
-          hasDestructive={!!run.hasDestructiveScript}
-        />
       )}
 
       {run?.status === 'Failed' && (
