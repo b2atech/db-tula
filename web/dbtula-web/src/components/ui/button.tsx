@@ -4,16 +4,16 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "../../lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-indigo-600 text-white hover:bg-indigo-700",
+        default: "bg-brand-orange text-white hover:bg-brand-orange-dark",
         destructive: "bg-red-600 text-white hover:bg-red-700",
-        outline: "border border-slate-200 bg-white hover:bg-slate-50 text-slate-900",
-        secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200",
-        ghost: "hover:bg-slate-100 text-slate-700",
-        link: "text-indigo-600 underline-offset-4 hover:underline",
+        outline: "border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 dark:border-border-soft dark:bg-bg-elevated dark:text-text-primary dark:hover:bg-bg-card",
+        secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200 dark:bg-bg-elevated dark:text-text-primary dark:hover:bg-border-soft",
+        ghost: "hover:bg-slate-100 text-slate-700 dark:text-text-secondary dark:hover:bg-bg-elevated",
+        link: "text-brand-orange underline-offset-4 hover:underline",
         success: "bg-green-600 text-white hover:bg-green-700",
         warning: "bg-amber-500 text-white hover:bg-amber-600",
       },

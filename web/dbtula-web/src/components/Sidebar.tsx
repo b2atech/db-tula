@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, GitCompare, History, Database, ShieldCheck, LogOut, ChevronRight, ChevronLeft, Sun, Moon } from 'lucide-react'
+import { LayoutDashboard, GitCompare, History, Database, ShieldCheck, ChevronRight, ChevronLeft } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
-import { useTheme } from '../hooks/useTheme'
 import { cn } from '../lib/utils'
+import logoUrl from '../assets/dbtula.png'
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -17,8 +17,7 @@ const adminNav = [
 ]
 
 export default function Sidebar() {
-  const { user, logout } = useAuth()
-  const { theme, toggle } = useTheme()
+  const { user } = useAuth()
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('dbtula-sidebar') === 'collapsed')
 
   const setCollapsedState = (v: boolean) => {
@@ -36,7 +35,7 @@ export default function Sidebar() {
             'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
             collapsed ? 'justify-center px-2' : '',
             isActive
-              ? 'bg-slate-700 text-white'
+              ? 'bg-brand-orange/15 text-brand-orange'
               : 'text-slate-400 hover:bg-slate-800 hover:text-white'
           )
         }
@@ -59,9 +58,12 @@ export default function Sidebar() {
       collapsed ? 'w-16' : 'w-60'
     )}>
       {/* Logo */}
-      <div className={cn('flex h-16 items-center border-b border-slate-800', collapsed ? 'justify-center px-2' : 'gap-3 px-5')}>
-        <img src="/logo.svg" alt="db-tula" className="h-8 w-8 rounded-lg shrink-0" />
-        {!collapsed && <span className="font-semibold text-white text-sm tracking-wide">db-tula</span>}
+      <div className={cn('flex h-16 items-center border-b border-slate-800', collapsed ? 'justify-center px-2' : 'gap-2 px-4')}>
+        {collapsed ? (
+          <img src="/logo.svg" alt="dbtula" className="h-8 w-8 rounded-lg shrink-0" />
+        ) : (
+          <img src={logoUrl} alt="dbtula" className="h-8 w-auto shrink-0" />
+        )}
         <button
           onClick={() => setCollapsedState(!collapsed)}
           className={cn('text-slate-500 hover:text-white transition-colors', collapsed ? '' : 'ml-auto')}
@@ -87,38 +89,6 @@ export default function Sidebar() {
           </>
         )}
       </nav>
-
-      {/* User footer */}
-      <div className="border-t border-slate-800 p-2">
-        {/* Dark mode toggle */}
-        <button
-          onClick={toggle}
-          className={cn(
-            'w-full flex items-center gap-3 rounded-lg px-3 py-2 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors text-sm mb-1',
-            collapsed ? 'justify-center' : ''
-          )}
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
-          {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
-          {!collapsed && (theme === 'dark' ? 'Light mode' : 'Dark mode')}
-        </button>
-
-        {/* User info + logout */}
-        <div className={cn('flex items-center gap-3 rounded-lg px-2 py-2', collapsed ? 'justify-center' : '')}>
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold shrink-0">
-            {user?.name?.charAt(0).toUpperCase() ?? '?'}
-          </div>
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-white truncate">{user?.name}</p>
-              <p className="text-xs text-slate-500 truncate">{user?.role}</p>
-            </div>
-          )}
-          <button onClick={logout} className="text-slate-500 hover:text-white transition-colors" title="Sign out">
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
     </div>
   )
 }

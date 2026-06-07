@@ -4,7 +4,7 @@ type Theme = 'light' | 'dark'
 
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem('dbtula-theme') as Theme) ?? 'light'
+    () => (localStorage.getItem('dbtula-theme') as Theme) ?? 'dark'
   )
 
   useEffect(() => {

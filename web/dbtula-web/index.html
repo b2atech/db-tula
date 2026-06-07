@@ -5,6 +5,10 @@
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>db-tula — Schema Drift Monitor</title>
+    <script>
+      // Apply saved theme (default dark) before paint to avoid a flash.
+      document.documentElement.classList.toggle('dark', (localStorage.getItem('dbtula-theme') ?? 'dark') === 'dark');
+    </script>
   </head>
   <body>
     <div id="root"></div>

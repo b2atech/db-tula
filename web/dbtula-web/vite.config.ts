@@ -10,4 +10,13 @@ export default defineConfig({
       '/hubs': { target: 'http://localhost:5275', ws: true },
     },
   },
+  build: {
+    rolldownOptions: {
+      onwarn(warning, defaultHandler) {
+        // Misplaced /*#__PURE__*/ annotation inside the SignalR dependency — not our code, harmless.
+        if (warning.code === 'INVALID_ANNOTATION' && warning.message?.includes('@microsoft/signalr')) return
+        defaultHandler(warning)
+      },
+    },
+  },
 })

@@ -1,5 +1,41 @@
 @import "tailwindcss";
 
+/* Drive `dark:` variants from a `.dark` class on <html> (toggled by useTheme),
+   instead of the OS prefers-color-scheme default. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Brand theme (orange-on-dark) — used by the public site / login landing page.
+   Exposed as Tailwind v4 utilities, e.g. bg-bg-main, text-brand-orange, border-border-soft.
+   Additive: stock slate/indigo/white utilities used by the authenticated app still work. */
+@theme {
+  /* Core brand */
+  --color-brand-orange: #F97316;
+  --color-brand-orange-dark: #EA580C;
+  --color-brand-orange-soft: #FDBA74;
+
+  /* Backgrounds */
+  --color-bg-main: #0B1117;
+  --color-bg-section: #121C28;
+  --color-bg-card: #172231;
+  --color-bg-elevated: #1E2A3A;
+
+  /* Text */
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #CBD5E1;
+  --color-text-muted: #8191A8;
+  --color-text-dark: #0F172A;
+
+  /* Borders / lines */
+  --color-border-soft: #243244;
+  --color-border-strong: #334155;
+
+  /* Utility */
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+  --color-info: #38BDF8;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, sans-serif;

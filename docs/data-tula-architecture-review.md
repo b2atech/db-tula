@@ -13,9 +13,7 @@ The original plan is a **strong first draft** — good instincts on read-only sa
 
 I read the actual repos (`dhanman-sales`, `dhanman-common`). The headline finding:
 
-> **The accounting ledger does NOT live in the Sales DB.** Invoices live in **Sales DB**; transactions and journal entries live in **Common DB**. Therefore the flagship use case (SAL-001…SAL-004, "invoice ↔ ledger") is **inherently cross-database**, not a same-database SQL rule. Only **SAL-005** (invoice settled amount vs payment records) is same-database.
-
-This single fact reshapes the design: **v0.1 must include the cross-database comparison engine from day one** (confirmed decision), rather than deferring it to v0.5 as the original plan assumed.
+> **The accounting ledger does NOT live in the Sales DB.** Invoices live in **Sales DB**; transactions and journal entries live in **Common DB**. Therefore the flagship use case (SAL-001…SAL-004, "invoice ↔ ledger") is **inherently cross-database**, not a same-database SQL rule. Only **SAL-005** (invoice settled amount vs payment records) is same-database.o h oss-database comparison engine from day one** (confirmed decision), rather than deferring it to v0.5 as the original plan assumed.
 
 I then **verified everything against the live QA databases** (`db.qa.dgtula.com`, PostgreSQL 18.3, read-only) across all nine service DBs. The live data surfaced a second structural correction that the source code alone did not reveal: **the forward link `<document>.transaction_id` is almost never populated** (of 23,433 sales invoices, 23,211 have a Common transaction via `document_id`, yet **21,089 have `transaction_id = NULL`**). The **authoritative link is the reverse direction — `transaction_headers.document_id` + `transaction_source_type`** — not `transaction_id`. Keying reconciliation on `transaction_id` would emit ~21k false positives. Full evidence and the complete rule catalog are in [data-tula-rule-catalog.md](data-tula-rule-catalog.md).
 
