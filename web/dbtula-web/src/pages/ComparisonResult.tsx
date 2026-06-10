@@ -40,15 +40,15 @@ function DiffModal({ item, onClose }: { item: ComparisonResultItem; onClose: () 
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-bg-card rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-medium text-slate-500 uppercase">{item.objectType}</span>
-            <span className="font-semibold text-slate-900 font-mono">{item.name}</span>
+            <span className="text-xs font-medium text-slate-500 dark:text-text-muted uppercase">{item.objectType}</span>
+            <span className="font-semibold text-slate-900 dark:text-text-primary font-mono">{item.name}</span>
             <Badge variant={info.badge}>{info.label}</Badge>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 rounded-lg p-1 hover:bg-slate-100">
+          <button onClick={onClose} className="text-slate-400 dark:text-text-muted hover:text-slate-700 dark:hover:text-text-secondary rounded-lg p-1 hover:bg-slate-100 dark:hover:bg-bg-elevated">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -56,28 +56,28 @@ function DiffModal({ item, onClose }: { item: ComparisonResultItem; onClose: () 
         <div className="flex-1 overflow-auto p-6 space-y-4">
           {/* Details */}
           {item.details && (
-            <p className="text-sm text-slate-600 bg-slate-50 rounded-lg px-4 py-2">{item.details}</p>
+            <p className="text-sm text-slate-600 dark:text-text-secondary bg-slate-50 dark:bg-bg-elevated rounded-lg px-4 py-2">{item.details}</p>
           )}
 
           {/* Sub-results (for tables: columns, PKs, FKs, indexes) */}
           {item.subResults && item.subResults.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Sub-component drift</p>
+              <p className="text-xs font-semibold text-slate-500 dark:text-text-muted uppercase tracking-wide">Sub-component drift</p>
               {item.subResults.map((sub, i) => {
                 const si = statusInfo(sub.status)
                 return (
-                  <div key={i} className="border border-slate-200 rounded-lg overflow-hidden">
+                  <div key={i} className="border border-slate-200 dark:border-border-soft rounded-lg overflow-hidden">
                     <button
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 text-left"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-bg-elevated text-left"
                       onClick={() => setExpanded(expanded === `sub-${i}` ? null : `sub-${i}`)}
                     >
                       <div className={`h-2 w-2 rounded-full ${si.dot}`} />
-                      <span className="text-sm font-medium text-slate-700 flex-1">{sub.component}</span>
+                      <span className="text-sm font-medium text-slate-700 dark:text-text-secondary flex-1">{sub.component}</span>
                       <Badge variant={si.badge} className="text-xs">{si.label}</Badge>
-                      {sub.details && (expanded === `sub-${i}` ? <ChevronDown className="h-3 w-3 text-slate-400" /> : <ChevronRight className="h-3 w-3 text-slate-400" />)}
+                      {sub.details && (expanded === `sub-${i}` ? <ChevronDown className="h-3 w-3 text-slate-400 dark:text-text-muted" /> : <ChevronRight className="h-3 w-3 text-slate-400 dark:text-text-muted" />)}
                     </button>
                     {expanded === `sub-${i}` && sub.details && (
-                      <div className="px-4 py-3 bg-slate-50 border-t text-xs font-mono text-slate-700 whitespace-pre-wrap">{sub.details}</div>
+                      <div className="px-4 py-3 bg-slate-50 dark:bg-bg-elevated border-t text-xs font-mono text-slate-700 dark:text-text-secondary whitespace-pre-wrap">{sub.details}</div>
                     )}
                     {expanded === `sub-${i}` && sub.createScript && (
                       <pre className="px-4 py-3 bg-slate-900 text-green-400 text-xs overflow-auto">{sub.createScript}</pre>
@@ -91,8 +91,8 @@ function DiffModal({ item, onClose }: { item: ComparisonResultItem; onClose: () 
           {/* Side-by-side diff (functions, views, procedures) */}
           {hasSideBySide && (
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">SQL diff</p>
-              <div className="rounded-lg overflow-hidden border border-slate-200"
+              <p className="text-xs font-semibold text-slate-500 dark:text-text-muted uppercase tracking-wide mb-2">SQL diff</p>
+              <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-border-soft"
                 dangerouslySetInnerHTML={{ __html: item.sideBySideDiffHtml! }} />
             </div>
           )}
@@ -102,7 +102,7 @@ function DiffModal({ item, onClose }: { item: ComparisonResultItem; onClose: () 
             <div className="grid grid-cols-2 gap-4">
               {[['SOURCE', item.sourceScript], ['TARGET', item.targetScript]].map(([label, sql]) => (
                 <div key={label as string}>
-                  <p className="text-xs font-medium text-slate-500 mb-1">{label as string}</p>
+                  <p className="text-xs font-medium text-slate-500 dark:text-text-muted mb-1">{label as string}</p>
                   <pre className="text-xs bg-slate-900 text-slate-100 p-3 rounded-lg overflow-auto max-h-60">{sql || '(not present)'}</pre>
                 </div>
               ))}
@@ -110,7 +110,7 @@ function DiffModal({ item, onClose }: { item: ComparisonResultItem; onClose: () 
           )}
 
           {!hasSideBySide && !item.subResults?.length && !item.sourceScript && !item.targetScript && (
-            <p className="text-slate-400 text-sm text-center py-4">No diff detail available for this object.</p>
+            <p className="text-slate-400 dark:text-text-muted text-sm text-center py-4">No diff detail available for this object.</p>
           )}
         </div>
       </div>
@@ -136,7 +136,7 @@ function ResultTable({ items, onSelect }: { items: ComparisonResultItem[]; onSel
   }
 
   const chips = [
-    { key: 'all',             label: `All (${counts.all})`,                       cls: 'bg-slate-100 text-slate-700' },
+    { key: 'all',             label: `All (${counts.all})`,                       cls: 'bg-slate-100 dark:bg-bg-elevated text-slate-700 dark:text-text-secondary' },
     { key: 'match',           label: `✅ Match (${counts.match})`,                 cls: 'bg-green-100 text-green-700' },
     { key: 'mismatch',        label: `⚠️ Mismatch (${counts.mismatch})`,           cls: 'bg-amber-100 text-amber-700' },
     { key: 'missingintarget', label: `❌ Missing in Target (${counts.missingintarget})`, cls: 'bg-red-100 text-red-700' },
@@ -154,7 +154,7 @@ function ResultTable({ items, onSelect }: { items: ComparisonResultItem[]; onSel
         ))}
       </div>
 
-      <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+      <div className="rounded-xl border border-slate-200 dark:border-border-soft overflow-hidden bg-white dark:bg-bg-card">
         <table className="w-full">
           <colgroup>
             <col style={{ width: '260px' }} />
@@ -163,24 +163,24 @@ function ResultTable({ items, onSelect }: { items: ComparisonResultItem[]; onSel
             <col style={{ width: '60px'  }} />
             <col />  {/* spacer — eats remaining space */}
           </colgroup>
-          <thead className="bg-slate-50 border-b border-slate-200">
+          <thead className="bg-slate-50 dark:bg-bg-elevated border-b border-slate-200 dark:border-border-soft">
             <tr>
-              <th className="px-3 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Name</th>
-              <th className="px-3 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Status</th>
-              <th className="px-3 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Details</th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold text-slate-500 dark:text-text-muted uppercase tracking-wide">Name</th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold text-slate-500 dark:text-text-muted uppercase tracking-wide">Status</th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold text-slate-500 dark:text-text-muted uppercase tracking-wide">Details</th>
               <th className="px-3 py-2"></th>
               <th></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-border-soft">
             {filtered.map((r, i) => {
               const si = statusInfo(r.status)
               const sk = statusKey(r.status)
               return (
                 <tr key={i}
-                  className={`${sk !== 'match' ? 'cursor-pointer hover:bg-indigo-50/40' : 'hover:bg-slate-50/60'}`}
+                  className={`${sk !== 'match' ? 'cursor-pointer hover:bg-indigo-50/40' : 'hover:bg-slate-50 dark:hover:bg-bg-elevated/60'}`}
                   onClick={() => sk !== 'match' && onSelect(r)}>
-                  <td className="px-3 py-2 font-mono text-xs font-medium text-slate-800">{r.name}</td>
+                  <td className="px-3 py-2 font-mono text-xs font-medium text-slate-800 dark:text-text-primary">{r.name}</td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5">
                       <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${si.dot}`} />
@@ -191,7 +191,7 @@ function ResultTable({ items, onSelect }: { items: ComparisonResultItem[]; onSel
                       }`}>{si.label}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-xs text-slate-400 truncate">{r.details}</td>
+                  <td className="px-3 py-2 text-xs text-slate-400 dark:text-text-muted truncate">{r.details}</td>
                   <td className="px-3 py-2">
                     {sk !== 'match' && (
                       <button onClick={e => { e.stopPropagation(); onSelect(r) }}
@@ -205,7 +205,7 @@ function ResultTable({ items, onSelect }: { items: ComparisonResultItem[]; onSel
               )
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={5} className="py-6 text-center text-slate-400 text-xs">No items</td></tr>
+              <tr><td colSpan={5} className="py-6 text-center text-slate-400 dark:text-text-muted text-xs">No items</td></tr>
             )}
           </tbody>
         </table>
@@ -287,12 +287,12 @@ export default function ComparisonResult() {
       <div className="space-y-4">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-text-primary">
             {run ? `${run.sourceDbName} → ${run.targetDbName}` : 'Loading...'}
           </h1>
           {run && (
-            <p className="text-slate-500 text-sm mt-0.5">
-              {run.profileName && <span className="mr-2 text-indigo-600 font-medium">{run.profileName}</span>}
+            <p className="text-slate-500 dark:text-text-muted text-sm mt-0.5">
+              {run.profileName && <span className="mr-2 text-brand-orange font-medium">{run.profileName}</span>}
               Started {new Date(run.startedAt).toLocaleString()}
               {run.completedAt && ` · ${Math.round((new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)}s`}
             </p>
@@ -325,10 +325,10 @@ export default function ComparisonResult() {
         <div className="grid grid-cols-2 gap-5 items-start">
 
           {/* Left — Results */}
-          <div className="min-w-0 rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="min-w-0 rounded-xl border border-slate-200 dark:border-border-soft bg-white dark:bg-bg-card overflow-hidden">
             {/* Matching header height */}
-            <div className="px-4 py-3 border-b bg-slate-50">
-              <span className="font-semibold text-slate-800 text-sm">Comparison Results</span>
+            <div className="px-4 py-3 border-b bg-slate-50 dark:bg-bg-elevated">
+              <span className="font-semibold text-slate-800 dark:text-text-primary text-sm">Comparison Results</span>
             </div>
             {types.length > 0 && (
               <div className="p-3">
@@ -384,7 +384,7 @@ export default function ComparisonResult() {
                   const { runId } = await api.comparisons.retry(id!)
                   navigate(`/results/${runId}`)
                 }}
-                className="shrink-0 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700"
+                className="shrink-0 bg-brand-orange text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-orange-dark"
               >
                 ↺ Retry
               </button>

@@ -84,7 +84,7 @@ function DatabaseForm({
             try { await onSave(form); } catch (e: unknown) { setErr(e instanceof Error ? e.message : 'Error'); setLoading(false); }
           }}
           disabled={loading}
-          className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+          className="flex-1 bg-brand-orange text-white rounded-lg py-2 text-sm font-medium hover:bg-brand-orange-dark disabled:opacity-50"
         >
           {loading ? 'Saving...' : 'Save'}
         </button>
@@ -123,13 +123,13 @@ export default function Databases() {
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Registered Databases</h1>
-        <button onClick={() => setEditing('new')} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+        <button onClick={() => setEditing('new')} className="bg-brand-orange text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-orange-dark">
           + Register Database
         </button>
       </div>
 
       {editing && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+        <div className="bg-white dark:bg-bg-card rounded-xl border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">{editing === 'new' ? 'Register Database' : 'Edit Database'}</h2>
           <DatabaseForm
             initial={editing !== 'new' ? editing : undefined}
@@ -141,7 +141,7 @@ export default function Databases() {
 
       {isLoading && <p className="text-gray-500">Loading...</p>}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white dark:bg-bg-card rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
@@ -164,7 +164,7 @@ export default function Databases() {
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-500">{d.isWriteAccount ? '✏️ Write' : '👁 Read'}</td>
                 <td className="px-4 py-3">
-                  <button onClick={() => testConnection(d.id)} className="text-indigo-600 text-xs hover:underline">Test</button>
+                  <button onClick={() => testConnection(d.id)} className="text-brand-orange text-xs hover:underline">Test</button>
                   {testResult[d.id] && (
                     <span className={`ml-2 text-xs ${testResult[d.id].success ? 'text-green-600' : 'text-red-600'}`}>
                       {testResult[d.id].success ? `✅ ${testResult[d.id].tableCount} tables` : `❌ ${testResult[d.id].error}`}

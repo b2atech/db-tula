@@ -32,8 +32,8 @@ function StatementRow({ stmt, checked, onToggle }: {
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <div className={`border-b border-slate-100 last:border-0 ${stmt.isApplied ? 'bg-green-50/50' : ''}`}>
-      <div className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50">
+    <div className={`border-b border-slate-100 dark:border-border-soft last:border-0 ${stmt.isApplied ? 'bg-green-50/50' : ''}`}>
+      <div className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-bg-elevated">
         <Checkbox
           checked={checked}
           onCheckedChange={v => onToggle(stmt.id, !!v)}
@@ -45,8 +45,8 @@ function StatementRow({ stmt, checked, onToggle }: {
           {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         </button>
         <div className="flex-1 min-w-0">
-          <span className="text-[10px] bg-slate-100 text-slate-500 px-1 rounded mr-1">{stmt.objectType}</span>
-          <span className="text-[11px] font-mono font-medium text-slate-800 truncate">{stmt.objectName}</span>
+          <span className="text-[10px] bg-slate-100 dark:bg-bg-elevated text-slate-500 dark:text-text-muted px-1 rounded mr-1">{stmt.objectType}</span>
+          <span className="text-[11px] font-mono font-medium text-slate-800 dark:text-text-primary truncate">{stmt.objectName}</span>
         </div>
         {stmt.isApplied && <span className="text-[9px] text-green-600 font-semibold">✓</span>}
       </div>
@@ -70,15 +70,15 @@ function PreviewModal({ stmts, checked, onClose }: {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-bg-card rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b">
-          <h3 className="font-semibold text-slate-900 text-sm">{selected.length} Safe statements to apply</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-text-primary text-sm">{selected.length} Safe statements to apply</h3>
           <div className="flex gap-2">
             <button onClick={() => navigator.clipboard.writeText(sql)}
-              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded px-2 py-1">
+              className="flex items-center gap-1 text-xs text-slate-500 dark:text-text-muted hover:text-slate-800 border border-slate-200 dark:border-border-soft rounded px-2 py-1">
               <Copy className="h-3 w-3" /> Copy
             </button>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+            <button onClick={onClose} className="text-slate-400 dark:text-text-muted hover:text-slate-700 dark:hover:text-text-secondary">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -101,6 +101,7 @@ export function SyncPlanner({ runId, hasSafe, hasRisky, hasDestructive }: {
   const qc = useQueryClient()
   const [applying, setApplying] = useState(false)
   const [result, setResult] = useState<ApplySafeResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [initialised, setInitialised] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
@@ -123,10 +124,13 @@ export function SyncPlanner({ runId, hasSafe, hasRisky, hasDestructive }: {
 
   const applySelected = async () => {
     setApplying(true)
+    setError(null)
     try {
       const r = await api.comparisons.applyApproved(runId)
       setResult(r)
       qc.invalidateQueries({ queryKey: ['statements', runId] })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Apply failed')
     } finally { setApplying(false) }
   }
 
@@ -145,10 +149,10 @@ export function SyncPlanner({ runId, hasSafe, hasRisky, hasDestructive }: {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden sticky top-6">
+    <div className="rounded-xl border border-slate-200 dark:border-border-soft bg-white dark:bg-bg-card overflow-hidden sticky top-6">
       {/* Header */}
-      <div className="px-4 py-3 border-b bg-slate-50 flex items-center justify-between">
-        <span className="font-semibold text-slate-800 text-sm">Sync Changes</span>
+      <div className="px-4 py-3 border-b bg-slate-50 dark:bg-bg-elevated flex items-center justify-between">
+        <span className="font-semibold text-slate-800 dark:text-text-primary text-sm">Sync Changes</span>
         {appliedCount > 0 && <Badge variant="success" className="text-xs">{appliedCount} applied</Badge>}
       </div>
 
@@ -173,7 +177,7 @@ export function SyncPlanner({ runId, hasSafe, hasRisky, hasDestructive }: {
               <StatementRow key={s.id} stmt={s} checked={checked.has(s.id)} onToggle={toggle} />
             ))}
             {safeStmts.length === 0 && (
-              <p className="px-3 py-4 text-center text-slate-400 text-xs">Loading...</p>
+              <p className="px-3 py-4 text-center text-slate-400 dark:text-text-muted text-xs">Loading...</p>
             )}
           </div>
 
@@ -182,6 +186,13 @@ export function SyncPlanner({ runId, hasSafe, hasRisky, hasDestructive }: {
             <div className="px-3 py-2 bg-green-50 border-t text-xs text-green-700">
               ✅ {result.successCount} applied
               {result.failureCount > 0 && <span className="text-red-600 ml-2">❌ {result.failureCount} failed</span>}
+            </div>
+          )}
+
+          {/* Apply error — e.g. "No write account configured for target database" */}
+          {error && (
+            <div className="px-3 py-2 bg-red-50 border-t text-xs text-red-700">
+              ❌ {error}
             </div>
           )}
 

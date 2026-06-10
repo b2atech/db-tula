@@ -13,7 +13,7 @@ const statusIcon = (status: RunStatus) => {
   if (status === 'Completed') return <CheckCircle className="h-4 w-4 text-green-500" />
   if (status === 'Failed') return <XCircle className="h-4 w-4 text-red-500" />
   if (status === 'Running') return <Clock className="h-4 w-4 text-blue-500 animate-spin" />
-  return <Clock className="h-4 w-4 text-slate-400" />
+  return <Clock className="h-4 w-4 text-slate-400 dark:text-text-muted" />
 }
 
 const statusVariant = (status: RunStatus, hasDrift: boolean) => {
@@ -56,14 +56,14 @@ export default function History() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Run History</h1>
-        <p className="text-slate-500 text-sm mt-1">All comparison runs, newest first</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-text-primary dark:text-white">Run History</h1>
+        <p className="text-slate-500 dark:text-text-muted text-sm mt-1">All comparison runs, newest first</p>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-text-muted" />
           <Input
             placeholder="Search profiles, databases..."
             value={search}
@@ -76,7 +76,7 @@ export default function History() {
           {statuses.map(s => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors
-                ${statusFilter === s ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                ${statusFilter === s ? 'bg-brand-orange text-white' : 'bg-white dark:bg-bg-card border border-slate-200 dark:border-border-soft text-slate-600 dark:text-text-secondary hover:bg-slate-50 dark:hover:bg-bg-elevated'}`}>
               {s}
             </button>
           ))}
@@ -86,7 +86,7 @@ export default function History() {
           {DAY_RANGES.map(r => (
             <button key={r.days} onClick={() => setDayRange(r.days)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
-                ${dayRange === r.days ? 'bg-slate-700 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                ${dayRange === r.days ? 'bg-slate-700 text-white' : 'bg-white dark:bg-bg-card border border-slate-200 dark:border-border-soft text-slate-600 dark:text-text-secondary hover:bg-slate-50 dark:hover:bg-bg-elevated'}`}>
               {r.label}
             </button>
           ))}
@@ -95,20 +95,20 @@ export default function History() {
 
       <Card>
         <CardContent className="p-0">
-          {isLoading && <p className="p-6 text-slate-400 text-sm">Loading...</p>}
+          {isLoading && <p className="p-6 text-slate-400 dark:text-text-muted text-sm">Loading...</p>}
           {!isLoading && filtered.length === 0 && (
-            <p className="p-8 text-center text-slate-400 text-sm">No runs match your filters</p>
+            <p className="p-8 text-center text-slate-400 dark:text-text-muted text-sm">No runs match your filters</p>
           )}
           {filtered.length > 0 && (
             <table className="w-full text-sm">
-              <thead className="border-b border-slate-100 bg-slate-50">
+              <thead className="border-b border-slate-100 dark:border-border-soft bg-slate-50 dark:bg-bg-elevated">
                 <tr>
                   {['', 'Profile / Databases', 'Status', 'Drift', 'Started', 'Duration', ''].map((h, i) => (
-                    <th key={i} className="px-4 py-3 text-left text-xs font-medium text-slate-500">{h}</th>
+                    <th key={i} className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-text-muted">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-border-soft">
                 {filtered.map(r => {
                   const summary: Summary | null = r.summaryJson ? JSON.parse(r.summaryJson) : null
                   const drift = summary ? summary.mismatch + summary.missingInTarget + summary.missingInSource : 0
@@ -118,12 +118,12 @@ export default function History() {
                     : '—'
 
                   return (
-                    <tr key={r.id} className="hover:bg-slate-50 cursor-pointer"
+                    <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-bg-elevated cursor-pointer"
                       onClick={() => r.status === 'Completed' && navigate(`/results/${r.id}`)}>
                       <td className="pl-4 py-3 w-8">{statusIcon(r.status)}</td>
                       <td className="px-4 py-3">
-                        <p className="font-medium text-slate-900">{r.profileName ?? `${r.sourceDbName} → ${r.targetDbName}`}</p>
-                        {r.profileName && <p className="text-xs text-slate-400">{r.sourceDbName} → {r.targetDbName}</p>}
+                        <p className="font-medium text-slate-900 dark:text-text-primary">{r.profileName ?? `${r.sourceDbName} → ${r.targetDbName}`}</p>
+                        {r.profileName && <p className="text-xs text-slate-400 dark:text-text-muted">{r.sourceDbName} → {r.targetDbName}</p>}
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant={statusVariant(r.status, hasDrift)}>{r.status}</Badge>
@@ -134,8 +134,8 @@ export default function History() {
                           : <span className="text-green-600">Clean</span>
                         ) : '—'}
                       </td>
-                      <td className="px-4 py-3 text-slate-500 text-xs">{new Date(r.startedAt).toLocaleString()}</td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">{duration}</td>
+                      <td className="px-4 py-3 text-slate-500 dark:text-text-muted text-xs">{new Date(r.startedAt).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-slate-400 dark:text-text-muted text-xs">{duration}</td>
                       <td className="px-4 py-3">
                         {r.status === 'Completed' && (
                           <Button variant="ghost" size="sm" className="text-xs"
@@ -157,7 +157,7 @@ export default function History() {
         <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <span className="text-sm text-slate-500">Page {page}</span>
+        <span className="text-sm text-slate-500 dark:text-text-muted">Page {page}</span>
         <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={runs.length < 20}>
           <ChevronRight className="h-4 w-4" />
         </Button>

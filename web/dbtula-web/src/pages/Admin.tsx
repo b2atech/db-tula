@@ -42,8 +42,8 @@ export default function Admin() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Admin</h1>
-        <p className="text-slate-500 text-sm mt-1">Manage users, access, and audit history</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-text-primary">Admin</h1>
+        <p className="text-slate-500 dark:text-text-muted text-sm mt-1">Manage users, access, and audit history</p>
       </div>
 
       <Tabs defaultValue="users">
@@ -58,18 +58,18 @@ export default function Admin() {
           <Card>
             <CardContent className="p-0">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b">
+                <thead className="bg-slate-50 dark:bg-bg-elevated border-b">
                   <tr>
                     {['Name', 'Email', 'Role', 'Joined'].map(h => (
-                      <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                      <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 dark:text-text-muted uppercase tracking-wide">{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-border-soft">
                   {users.map(u => (
-                    <tr key={u.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-medium text-slate-900">{u.name}</td>
-                      <td className="px-4 py-3 text-slate-500">{u.email}</td>
+                    <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-bg-elevated">
+                      <td className="px-4 py-3 font-medium text-slate-900 dark:text-text-primary">{u.name}</td>
+                      <td className="px-4 py-3 text-slate-500 dark:text-text-muted">{u.email}</td>
                       <td className="px-4 py-3">
                         <Select value={u.role} onValueChange={v => updateRole.mutate({ id: u.id, role: v as UserRole })}>
                           <SelectTrigger className="w-32 h-7 text-xs">
@@ -80,7 +80,7 @@ export default function Admin() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-400">
+                      <td className="px-4 py-3 text-xs text-slate-400 dark:text-text-muted">
                         {new Date(u.id.substring(0, 8) === '00000000' ? Date.now() : Date.now()).toLocaleDateString()}
                       </td>
                     </tr>
@@ -96,9 +96,9 @@ export default function Admin() {
           <div className="space-y-4">
             <Card>
               <CardContent className="p-4">
-                <p className="text-sm text-slate-600 mb-3">
+                <p className="text-sm text-slate-600 dark:text-text-secondary mb-3">
                   Only users whose email is in this list can sign in.
-                  <span className="text-slate-400 ml-1">(Empty list = anyone with Google can sign in)</span>
+                  <span className="text-slate-400 dark:text-text-muted ml-1">(Empty list = anyone with Google can sign in)</span>
                 </p>
                 <div className="flex gap-2">
                   <Input
@@ -123,24 +123,24 @@ export default function Admin() {
             <Card>
               <CardContent className="p-0">
                 {allowedEmails.length === 0 ? (
-                  <p className="px-4 py-8 text-center text-slate-400 text-sm">
+                  <p className="px-4 py-8 text-center text-slate-400 dark:text-text-muted text-sm">
                     No restrictions — anyone can sign in with Google.
                   </p>
                 ) : (
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50 border-b">
+                    <thead className="bg-slate-50 dark:bg-bg-elevated border-b">
                       <tr>
                         {['Email', 'Added By', 'Added At', ''].map(h => (
-                          <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                          <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 dark:text-text-muted uppercase tracking-wide">{h}</th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-100 dark:divide-border-soft">
                       {allowedEmails.map(e => (
-                        <tr key={e.id} className="hover:bg-slate-50">
-                          <td className="px-4 py-2.5 font-medium text-slate-900">{e.email}</td>
-                          <td className="px-4 py-2.5 text-slate-500">{e.addedBy}</td>
-                          <td className="px-4 py-2.5 text-xs text-slate-400">{new Date(e.addedAt).toLocaleString()}</td>
+                        <tr key={e.id} className="hover:bg-slate-50 dark:hover:bg-bg-elevated">
+                          <td className="px-4 py-2.5 font-medium text-slate-900 dark:text-text-primary">{e.email}</td>
+                          <td className="px-4 py-2.5 text-slate-500 dark:text-text-muted">{e.addedBy}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-400 dark:text-text-muted">{new Date(e.addedAt).toLocaleString()}</td>
                           <td className="px-4 py-2.5 text-right">
                             <Button
                               variant="ghost" size="sm"
@@ -165,26 +165,26 @@ export default function Admin() {
           <Card>
             <CardContent className="p-0">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b">
+                <thead className="bg-slate-50 dark:bg-bg-elevated border-b">
                   <tr>
                     {['Applied By', 'Target DB', 'Applied At', 'Success', 'Failed', 'Errors'].map(h => (
-                      <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                      <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 dark:text-text-muted uppercase tracking-wide">{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-border-soft">
                   {logs.map(l => (
-                    <tr key={l.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-2.5 font-medium text-slate-900">{l.appliedByName}</td>
-                      <td className="px-4 py-2.5 text-slate-600">{l.targetDbName}</td>
-                      <td className="px-4 py-2.5 text-xs text-slate-400">{new Date(l.appliedAt).toLocaleString()}</td>
+                    <tr key={l.id} className="hover:bg-slate-50 dark:hover:bg-bg-elevated">
+                      <td className="px-4 py-2.5 font-medium text-slate-900 dark:text-text-primary">{l.appliedByName}</td>
+                      <td className="px-4 py-2.5 text-slate-600 dark:text-text-secondary">{l.targetDbName}</td>
+                      <td className="px-4 py-2.5 text-xs text-slate-400 dark:text-text-muted">{new Date(l.appliedAt).toLocaleString()}</td>
                       <td className="px-4 py-2.5"><Badge variant="success">{l.successCount}</Badge></td>
                       <td className="px-4 py-2.5">{l.failureCount > 0 && <Badge variant="destructive">{l.failureCount}</Badge>}</td>
                       <td className="px-4 py-2.5 text-xs text-red-500 max-w-xs truncate">{l.errorDetails ?? '—'}</td>
                     </tr>
                   ))}
                   {logs.length === 0 && (
-                    <tr><td colSpan={6} className="py-8 text-center text-slate-400 text-sm">No sync apply actions yet.</td></tr>
+                    <tr><td colSpan={6} className="py-8 text-center text-slate-400 dark:text-text-muted text-sm">No sync apply actions yet.</td></tr>
                   )}
                 </tbody>
               </table>

@@ -33,16 +33,16 @@ function ProfileForm({
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Profile Name</label>
+        <label className="block text-xs font-medium text-slate-600 dark:text-text-secondary mb-1">Profile Name</label>
         <Input placeholder="QA → PROD · Common" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Description (optional)</label>
+        <label className="block text-xs font-medium text-slate-600 dark:text-text-secondary mb-1">Description (optional)</label>
         <Input placeholder="Nightly schema drift check" value={form.description ?? ''} onChange={e => setForm(f => ({ ...f, description: e.target.value || null }))} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Source Database</label>
+          <label className="block text-xs font-medium text-slate-600 dark:text-text-secondary mb-1">Source Database</label>
           <Select value={form.sourceDbId} onValueChange={v => setForm(f => ({ ...f, sourceDbId: v }))}>
             <SelectTrigger><SelectValue placeholder="Select source..." /></SelectTrigger>
             <SelectContent>
@@ -51,7 +51,7 @@ function ProfileForm({
           </Select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Target Database</label>
+          <label className="block text-xs font-medium text-slate-600 dark:text-text-secondary mb-1">Target Database</label>
           <Select value={form.targetDbId} onValueChange={v => setForm(f => ({ ...f, targetDbId: v }))}>
             <SelectTrigger><SelectValue placeholder="Select target..." /></SelectTrigger>
             <SelectContent>
@@ -139,8 +139,8 @@ export default function Profiles() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Comparison Profiles</h1>
-          <p className="text-slate-500 text-sm mt-1">Saved database comparison configurations</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-text-primary">Comparison Profiles</h1>
+          <p className="text-slate-500 dark:text-text-muted text-sm mt-1">Saved database comparison configurations</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={runAll} disabled={runningAll} className="gap-2">
@@ -162,21 +162,21 @@ export default function Profiles() {
             <p className="text-sm font-medium text-indigo-800">Running all profiles…</p>
             <div className="mt-1 h-2 bg-indigo-100 rounded-full overflow-hidden">
               <div
-                className="h-full bg-indigo-500 transition-all"
+                className="h-full bg-brand-orange transition-all"
                 style={{ width: `${(activeBatch.done / activeBatch.total) * 100}%` }}
               />
             </div>
           </div>
-          <span className="text-indigo-700 font-semibold text-sm">{activeBatch.done}/{activeBatch.total}</span>
+          <span className="text-brand-orange font-semibold text-sm">{activeBatch.done}/{activeBatch.total}</span>
         </div>
       )}
 
-      {isLoading && <p className="text-slate-400 text-sm">Loading...</p>}
+      {isLoading && <p className="text-slate-400 dark:text-text-muted text-sm">Loading...</p>}
 
       {profiles.length === 0 && !isLoading && (
         <Card>
           <CardContent className="py-16 text-center">
-            <p className="text-slate-400">No profiles yet. Create one to get started.</p>
+            <p className="text-slate-400 dark:text-text-muted">No profiles yet. Create one to get started.</p>
           </CardContent>
         </Card>
       )}
@@ -188,17 +188,17 @@ export default function Profiles() {
               <div className="flex items-center gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <p className="font-semibold text-slate-900">{p.name}</p>
+                    <p className="font-semibold text-slate-900 dark:text-text-primary">{p.name}</p>
                     <LastRunBadge profile={p} />
                   </div>
-                  <p className="text-sm text-slate-500">
-                    <span className="font-medium text-slate-700">{p.sourceDbName}</span>
+                  <p className="text-sm text-slate-500 dark:text-text-muted">
+                    <span className="font-medium text-slate-700 dark:text-text-secondary">{p.sourceDbName}</span>
                     <span className="mx-2 text-slate-300">→</span>
-                    <span className="font-medium text-slate-700">{p.targetDbName}</span>
+                    <span className="font-medium text-slate-700 dark:text-text-secondary">{p.targetDbName}</span>
                   </p>
-                  {p.description && <p className="text-xs text-slate-400 mt-0.5">{p.description}</p>}
+                  {p.description && <p className="text-xs text-slate-400 dark:text-text-muted mt-0.5">{p.description}</p>}
                   {p.lastRunAt && (
-                    <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                    <p className="text-xs text-slate-400 dark:text-text-muted mt-1 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       Last run {new Date(p.lastRunAt).toLocaleString()}
                     </p>

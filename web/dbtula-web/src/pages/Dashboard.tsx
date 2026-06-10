@@ -61,9 +61,9 @@ function StatCard({ label, value, sub, icon: Icon, color }: {
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500">{label}</p>
-            <p className="text-3xl font-bold text-slate-900 mt-1">{value}</p>
-            {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+            <p className="text-sm font-medium text-slate-500 dark:text-text-muted">{label}</p>
+            <p className="text-3xl font-bold text-slate-900 dark:text-text-primary mt-1">{value}</p>
+            {sub && <p className="text-xs text-slate-400 dark:text-text-muted mt-1">{sub}</p>}
           </div>
           <div className={`rounded-lg p-2.5 ${color}`}>
             <Icon className="h-5 w-5 text-white" />
@@ -87,8 +87,8 @@ function HealthCard({ health, onRun }: { health: DbHealth; onRun: () => void }) 
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2 mb-3">
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-slate-900 text-sm truncate">{health.profileName}</p>
-            <p className="text-xs text-slate-400 mt-0.5 truncate">{health.sourceDb} → {health.targetDb}</p>
+            <p className="font-medium text-slate-900 dark:text-text-primary text-sm truncate">{health.profileName}</p>
+            <p className="text-xs text-slate-400 dark:text-text-muted mt-0.5 truncate">{health.sourceDb} → {health.targetDb}</p>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             <div className={`h-2 w-2 rounded-full ${s.dot}`} />
@@ -96,7 +96,7 @@ function HealthCard({ health, onRun }: { health: DbHealth; onRun: () => void }) 
           </div>
         </div>
         <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 dark:text-text-muted">
             {health.lastRunAt ? `Last run ${new Date(health.lastRunAt).toLocaleDateString()}` : 'No runs yet'}
           </p>
           <Button size="sm" variant="outline" onClick={onRun} className="h-7 text-xs gap-1">
@@ -141,13 +141,13 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-500 text-sm mt-1">Schema drift monitoring across all environments</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-text-primary">Dashboard</h1>
+        <p className="text-slate-500 dark:text-text-muted text-sm mt-1">Schema drift monitoring across all environments</p>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Runs (30 days)" value={summary?.totalRuns30d ?? '—'} icon={Activity} color="bg-indigo-500" />
+        <StatCard label="Runs (30 days)" value={summary?.totalRuns30d ?? '—'} icon={Activity} color="bg-brand-orange" />
         <StatCard label="Drift Rate" value={`${driftRate}%`} sub={`${summary?.driftRuns30d ?? 0} runs with drift`} icon={AlertTriangle} color="bg-amber-500" />
         <StatCard label="Statements Applied" value={summary?.statementsApplied ?? '—'} icon={CheckCircle} color="bg-green-500" />
         <StatCard label="Databases Registered" value={summary?.dbsRegistered ?? '—'} icon={Database} color="bg-slate-600" />
@@ -162,7 +162,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {profileTrend.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
+              <div className="h-48 flex items-center justify-center text-slate-400 dark:text-text-muted text-sm">
                 No data yet — run some comparisons first
               </div>
             ) : (
@@ -177,14 +177,14 @@ export default function Dashboard() {
             <CardTitle className="text-base">Recent Runs</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100 dark:divide-border-soft">
               {recentRuns.slice(0, 6).map(r => {
                 const summary: Summary | null = r.summaryJson ? JSON.parse(r.summaryJson) : null
                 const hasDrift = summary && (summary.mismatch + summary.missingInTarget + summary.missingInSource > 0)
                 return (
                   <div
                     key={r.id}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer"
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-bg-elevated cursor-pointer"
                     onClick={() => r.status === 'Completed' && navigate(`/results/${r.id}`)}
                   >
                     {r.status === 'Completed' && !hasDrift && <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />}
@@ -192,17 +192,17 @@ export default function Dashboard() {
                     {r.status === 'Failed' && <XCircle className="h-4 w-4 text-red-500 shrink-0" />}
                     {(r.status === 'Pending' || r.status === 'Running') && <Clock className="h-4 w-4 text-blue-500 shrink-0 animate-spin" />}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-slate-800 truncate">
+                      <p className="text-xs font-medium text-slate-800 dark:text-text-primary truncate">
                         {r.profileName ?? `${r.sourceDbName} → ${r.targetDbName}`}
                       </p>
-                      <p className="text-xs text-slate-400">{new Date(r.startedAt).toLocaleString()}</p>
+                      <p className="text-xs text-slate-400 dark:text-text-muted">{new Date(r.startedAt).toLocaleString()}</p>
                     </div>
                     <Badge variant={statusBadgeVariant(r.status)} className="text-xs shrink-0">{r.status}</Badge>
                   </div>
                 )
               })}
               {recentRuns.length === 0 && (
-                <p className="px-4 py-8 text-center text-sm text-slate-400">No runs yet</p>
+                <p className="px-4 py-8 text-center text-sm text-slate-400 dark:text-text-muted">No runs yet</p>
               )}
             </div>
           </CardContent>
@@ -213,9 +213,9 @@ export default function Dashboard() {
       {health.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <GitCompare className="h-4 w-4 text-slate-500" />
-            <h2 className="text-sm font-semibold text-slate-700">Database Health</h2>
-            <span className="text-xs text-slate-400">({health.length} profiles)</span>
+            <GitCompare className="h-4 w-4 text-slate-500 dark:text-text-muted" />
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-text-secondary">Database Health</h2>
+            <span className="text-xs text-slate-400 dark:text-text-muted">({health.length} profiles)</span>
           </div>
           <div className="grid grid-cols-3 gap-3">
             {health.map(h => (

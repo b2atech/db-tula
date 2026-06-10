@@ -33,7 +33,14 @@ public class SyncScriptGenerator
 
         // ── SAFE: Sequences (may be referenced in column defaults)
         foreach (var r in MissingInTarget(results, SchemaObjectType.Sequence))
-            script.Safe.Add(Stmt("Sequence", r.Name, r.DiffScript ?? "", "CREATE SEQUENCE missing in target"));
+        {
+            var seqSql = r.DiffScript ?? "";
+            // Idempotent — target may already have an identity/serial-owned sequence.
+            if (!string.IsNullOrWhiteSpace(seqSql) && !seqSql.Contains("IF NOT EXISTS", StringComparison.OrdinalIgnoreCase))
+                seqSql = System.Text.RegularExpressions.Regex.Replace(
+                    seqSql, @"(?i)\bCREATE\s+SEQUENCE\s+", "CREATE SEQUENCE IF NOT EXISTS ");
+            script.Safe.Add(Stmt("Sequence", r.Name, seqSql, "CREATE SEQUENCE missing in target"));
+        }
 
         // ── SAFE: Missing tables — topologically ordered by FK dependencies
         var missingTables = MissingInTarget(results, SchemaObjectType.Table).ToList();
@@ -44,14 +51,48 @@ public class SyncScriptGenerator
                 script.Safe.Add(Stmt("Table", r.Name, sql, "Table missing in target"));
         }
 
-        // ── SAFE: Missing columns (nullable or with DEFAULT — additive)
+        // ── Missing columns. Nullable / has-DEFAULT adds are additive → SAFE.
+        // A NOT NULL column with no DEFAULT fails on a populated table → RISKY.
         foreach (var r in Mismatched(results, SchemaObjectType.Table))
             foreach (var sub in MissingInTargetSubs(r, "Columns"))
                 if (!string.IsNullOrWhiteSpace(sub.CreateScript))
-                    script.Safe.Add(Stmt("Column", r.Name, sub.CreateScript!, "Column missing in target"));
+                {
+                    var ddl = sub.CreateScript!;
+                    var failsOnPopulatedTable =
+                        ddl.Contains("NOT NULL", StringComparison.OrdinalIgnoreCase)
+                        && !ddl.Contains("DEFAULT", StringComparison.OrdinalIgnoreCase);
+                    if (failsOnPopulatedTable)
+                        script.Risky.Add(Stmt("Column", r.Name, ddl,
+                            "NOT NULL column with no DEFAULT — fails if target table has rows"));
+                    else
+                        script.Safe.Add(Stmt("Column", r.Name, ddl, "Column missing in target"));
+                }
 
-        // ── SAFE: Missing indexes
+        // ── Changed columns. The comparer emits one ALTER per differing attribute; classify each:
+        //    SET DEFAULT / DROP DEFAULT / DROP NOT NULL → SAFE.  TYPE change, backfill UPDATE,
+        //    SET NOT NULL → RISKY (data-dependent). Risky parts only when risky changes are enabled.
         foreach (var r in Mismatched(results, SchemaObjectType.Table))
+            foreach (var sub in r.SubResults.Where(s => s.Component == "Columns" && s.Status == ComparisonStatus.Mismatch))
+            {
+                if (string.IsNullOrWhiteSpace(sub.CreateScript)) continue;
+                foreach (var stmt in sub.CreateScript.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var isRisky = stmt.StartsWith("--")
+                        || stmt.StartsWith("UPDATE ", StringComparison.OrdinalIgnoreCase)
+                        || stmt.Contains(" TYPE ", StringComparison.OrdinalIgnoreCase)
+                        || stmt.Contains("SET NOT NULL", StringComparison.OrdinalIgnoreCase);
+                    if (isRisky)
+                    {
+                        if (options.IncludeRiskyChanges)
+                            script.Risky.Add(Stmt("ColumnChange", r.Name, stmt, sub.Details ?? "Column attribute change"));
+                    }
+                    else
+                        script.Safe.Add(Stmt("ColumnChange", r.Name, stmt, sub.Details ?? "Column attribute change"));
+                }
+            }
+
+        // ── SAFE: Missing indexes (includes secondary indexes of brand-new tables)
+        foreach (var r in MismatchedOrMissing(results, SchemaObjectType.Table))
             foreach (var sub in MissingInTargetSubs(r, "Indexes"))
                 if (!string.IsNullOrWhiteSpace(sub.CreateScript))
                     script.Safe.Add(Stmt("Index", r.Name, sub.CreateScript!, "Index missing in target"));
@@ -62,8 +103,8 @@ public class SyncScriptGenerator
                 if (!string.IsNullOrWhiteSpace(sub.CreateScript))
                     script.Safe.Add(Stmt("PrimaryKey", r.Name, sub.CreateScript!, "Primary key missing in target"));
 
-        // ── SAFE: Missing FKs
-        foreach (var r in Mismatched(results, SchemaObjectType.Table))
+        // ── SAFE: Missing FKs (includes FKs of brand-new tables; emitted after all CREATE TABLEs)
+        foreach (var r in MismatchedOrMissing(results, SchemaObjectType.Table))
             foreach (var sub in MissingInTargetSubs(r, "ForeignKeys"))
                 if (!string.IsNullOrWhiteSpace(sub.CreateScript))
                     script.Safe.Add(Stmt("ForeignKey", r.Name, sub.CreateScript!, "Foreign key missing in target"));
@@ -104,9 +145,14 @@ public class SyncScriptGenerator
             funcSb.AppendLine();
             foreach (var r in funcResults)
             {
-                var body = r.SourceScript ?? r.DiffScript;
+                var body = (r.SourceScript ?? r.DiffScript)?.Trim();
                 if (!string.IsNullOrWhiteSpace(body))
-                    funcSb.AppendLine(body.Trim()).AppendLine();
+                {
+                    // pg_get_functiondef emits no trailing ';'. Without it the next
+                    // CREATE runs into the previous body → "syntax error at or near CREATE".
+                    if (!body.EndsWith(";")) body += ";";
+                    funcSb.AppendLine(body).AppendLine();
+                }
             }
             script.Safe.Add(Stmt("Functions", "(all changed)", funcSb.ToString().Trim(),
                 "CREATE OR REPLACE FUNCTION/PROCEDURE — check_function_bodies disabled during migration"));
@@ -141,21 +187,7 @@ public class SyncScriptGenerator
                 }
             }
 
-            // Column type changes — apgdiff improvement: include USING clause template
-            // ALTER COLUMN TYPE without USING fails when Postgres cannot auto-cast.
-            // Pattern: ALTER TABLE t ALTER COLUMN c TYPE new_type USING c::text::new_type
-            foreach (var r in Mismatched(results, SchemaObjectType.Table))
-                foreach (var sub in r.SubResults.Where(s => s.Component == "Columns" && s.Status == ComparisonStatus.Mismatch))
-                {
-                    var colName = ExtractColumnName(sub.Details);
-                    var usingSql = !string.IsNullOrEmpty(colName)
-                        ? $"ALTER TABLE \"{r.Name}\" ALTER COLUMN \"{colName}\" TYPE <new_type>\n    USING \"{colName}\"::text::<new_type>;"
-                        : $"-- ALTER TABLE \"{r.Name}\" ALTER COLUMN ... TYPE ...;";
-
-                    script.Risky.Add(Stmt("ColumnTypeChange", r.Name,
-                        $"-- ⚠ Verify data compatibility. Fill in <new_type>.\n-- {sub.Details}\n{usingSql}",
-                        sub.Details ?? "Column definition differs"));
-                }
+            // (Column attribute changes are emitted in the SAFE/RISKY split above.)
 
             // Sequence definition changes
             foreach (var r in Mismatched(results, SchemaObjectType.Sequence))
@@ -388,6 +420,12 @@ public class SyncScriptGenerator
 
     private static IEnumerable<ComparisonResult> Mismatched(IList<ComparisonResult> results, SchemaObjectType type) =>
         results.Where(r => r.ObjectType == type && r.Status == ComparisonStatus.Mismatch);
+
+    // Tables that are either changed (Mismatch) or entirely missing in target. Used for FK/index
+    // emission so a brand-new table's FKs and secondary indexes are generated too.
+    private static IEnumerable<ComparisonResult> MismatchedOrMissing(IList<ComparisonResult> results, SchemaObjectType type) =>
+        results.Where(r => r.ObjectType == type &&
+            (r.Status == ComparisonStatus.Mismatch || r.Status == ComparisonStatus.MissingInTarget));
 
     private static IEnumerable<ComparisonSubResult> MissingInTargetSubs(ComparisonResult r, string component) =>
         r.SubResults.Where(s => s.Component == component && s.Status == ComparisonStatus.MissingInTarget);

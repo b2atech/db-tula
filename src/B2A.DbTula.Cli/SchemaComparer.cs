@@ -298,7 +298,39 @@ public class SchemaComparer : ISchemaComparer
 
             if (target == null)
             {
-                results.Add(CreateResult(tableName, SchemaObjectType.Table, ComparisonStatus.MissingInTarget, "Exists in source, missing in target"));
+                // Whole table missing in target. Reconstruct the full definition from the source:
+                //   • CREATE TABLE (columns + PK + unique inline) from the typed model
+                //   • FKs and secondary indexes pulled verbatim from the source catalog
+                //     (pg_get_constraintdef / pg_get_indexdef)
+                // Emitted as separate sub-results so the generator runs FKs/indexes AFTER all
+                // tables exist. Without this the table was silently dropped from the sync script.
+                var createScript = BuildCreateTableScript(source);
+                var subs = new List<ComparisonSubResult>
+                {
+                    new("CreateScript", ComparisonStatus.MissingInTarget, "Table missing in target", createScript)
+                };
+                foreach (var fk in source.ForeignKeys)
+                {
+                    var fkScript = await sourceProvider.GetForeignKeyCreateScriptAsync(source.Name, fk.Name);
+                    if (!string.IsNullOrWhiteSpace(fkScript))
+                        subs.Add(new("ForeignKeys", ComparisonStatus.MissingInTarget, $"Foreign key '{fk.Name}' missing in target", fkScript));
+                }
+                foreach (var idx in source.Indexes)
+                {
+                    var idxScript = await sourceProvider.GetIndexCreateScriptAsync(idx.Name);
+                    if (!string.IsNullOrWhiteSpace(idxScript))
+                        subs.Add(new("Indexes", ComparisonStatus.MissingInTarget, $"Index '{idx.Name}' missing in target", idxScript));
+                }
+                results.Add(new ComparisonResult
+                {
+                    ObjectType = SchemaObjectType.Table,
+                    Name = tableName,
+                    Status = ComparisonStatus.MissingInTarget,
+                    Details = "Exists in source, missing in target",
+                    DiffScript = createScript,
+                    SourceScript = createScript,
+                    SubResults = subs
+                });
                 continue;
             }
 
@@ -420,13 +452,14 @@ public class SchemaComparer : ISchemaComparer
             {
                 status = ComparisonStatus.Mismatch;
                 subResults.Add(new("Columns", ComparisonStatus.MissingInTarget, $"Column '{col.Name}' is missing in target.",
-                    $"ALTER TABLE \"{source.Name}\" ADD COLUMN \"{col.Name}\" {col.DataType} {(col.IsNullable ? "" : "NOT NULL")};"));
+                    $"ALTER TABLE \"{source.Name}\" ADD COLUMN {RenderColumnDefinition(col)};"));
             }
             else if (!col.Equals(tgt))
             {
                 status = ComparisonStatus.Mismatch;
                 subResults.Add(new("Columns", ComparisonStatus.Mismatch,
-                    $"Column '{col.Name}' definition differs: source({col.DataType}) vs target({tgt.DataType})", string.Empty));
+                    $"Column '{col.Name}' differs — {DescribeColumnDifference(col, tgt)}",
+                    BuildColumnAlterStatements(source.Name, col, tgt)));
             }
         }
 
@@ -441,6 +474,153 @@ public class SchemaComparer : ISchemaComparer
         }
 
         return status;
+    }
+
+    /// <summary>
+    /// Builds a full CREATE TABLE script from the source model: columns (with type/null/default),
+    /// inline PRIMARY KEY and UNIQUE constraints. Used when a table is missing in the target so the
+    /// sync generator has something to emit. FKs/standalone indexes are handled separately.
+    /// </summary>
+    internal static string BuildCreateTableScript(TableDefinition table)
+    {
+        var lines = new List<string>();
+        foreach (var col in table.Columns)
+            lines.Add(RenderColumnDefinition(col));
+
+        foreach (var pk in table.PrimaryKeys.Where(p => p.Columns.Count > 0))
+        {
+            var name = string.IsNullOrWhiteSpace(pk.Name) ? $"pk_{table.Name}" : pk.Name;
+            lines.Add($"CONSTRAINT \"{name}\" PRIMARY KEY ({string.Join(", ", pk.Columns.Select(c => $"\"{c}\""))})");
+        }
+
+        foreach (var uc in table.UniqueConstraints.Where(u => u.Columns.Count > 0))
+        {
+            var name = string.IsNullOrWhiteSpace(uc.Name) ? $"uq_{table.Name}" : uc.Name;
+            lines.Add($"CONSTRAINT \"{name}\" UNIQUE ({string.Join(", ", uc.Columns.Select(c => $"\"{c}\""))})");
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"CREATE TABLE IF NOT EXISTS \"{table.Name}\" (");
+        for (int i = 0; i < lines.Count; i++)
+            sb.AppendLine($"    {lines[i]}{(i < lines.Count - 1 ? "," : "")}");
+        sb.Append(");");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Lists which column attributes actually differ. The old message only printed DataType,
+    /// producing confusing "uuid vs uuid" lines when the real difference was nullability/default.
+    /// </summary>
+    internal static string DescribeColumnDifference(ColumnDefinition s, ColumnDefinition t)
+    {
+        var diffs = new List<string>();
+        if (!string.Equals(s.DataType, t.DataType, StringComparison.OrdinalIgnoreCase))
+            diffs.Add($"type: source={s.DataType} target={t.DataType}");
+        if (s.IsNullable != t.IsNullable)
+            diffs.Add($"nullable: source={(s.IsNullable ? "YES" : "NO")} target={(t.IsNullable ? "YES" : "NO")}");
+        if (!string.Equals(s.DefaultValue ?? "", t.DefaultValue ?? "", StringComparison.OrdinalIgnoreCase))
+            diffs.Add($"default: source={s.DefaultValue ?? "none"} target={t.DefaultValue ?? "none"}");
+        if (s.Length != t.Length)
+            diffs.Add($"length: source={s.Length?.ToString() ?? "-"} target={t.Length?.ToString() ?? "-"}");
+        if (s.NumericPrecision != t.NumericPrecision || s.NumericScale != t.NumericScale)
+            diffs.Add($"precision: source=({s.NumericPrecision},{s.NumericScale}) target=({t.NumericPrecision},{t.NumericScale})");
+        if (s.IsIdentity != t.IsIdentity)
+            diffs.Add($"identity: source={s.IsIdentity} target={t.IsIdentity}");
+        if (s.IsComputed != t.IsComputed)
+            diffs.Add($"computed: source={s.IsComputed} target={t.IsComputed}");
+        return diffs.Count > 0 ? string.Join("; ", diffs) : "definition differs";
+    }
+
+    /// <summary>
+    /// Builds the ALTER statements to make the target column match the source — one per differing
+    /// attribute, newline-separated. The generator classifies each: SET DEFAULT / DROP DEFAULT /
+    /// DROP NOT NULL are safe; TYPE change, backfill UPDATE and SET NOT NULL are risky.
+    /// Replaces the old generic "TYPE &lt;new_type&gt;" template that never fixed nullability/default.
+    /// </summary>
+    internal static string BuildColumnAlterStatements(string table, ColumnDefinition src, ColumnDefinition tgt)
+    {
+        var stmts = new List<string>();
+        var t = $"\"{table}\"";
+        var c = $"\"{src.Name}\"";
+
+        // Type/size change — RISKY (data must be castable).
+        if (!string.Equals(src.DataType, tgt.DataType, StringComparison.OrdinalIgnoreCase)
+            || src.Length != tgt.Length
+            || src.NumericPrecision != tgt.NumericPrecision
+            || src.NumericScale != tgt.NumericScale)
+        {
+            var newType = RenderColumnType(src);
+            stmts.Add($"ALTER TABLE {t} ALTER COLUMN {c} TYPE {newType} USING {c}::text::{newType};");
+        }
+
+        // Default change — SAFE (metadata only).
+        if (!string.Equals(src.DefaultValue ?? "", tgt.DefaultValue ?? "", StringComparison.OrdinalIgnoreCase))
+            stmts.Add(string.IsNullOrWhiteSpace(src.DefaultValue)
+                ? $"ALTER TABLE {t} ALTER COLUMN {c} DROP DEFAULT;"
+                : $"ALTER TABLE {t} ALTER COLUMN {c} SET DEFAULT {src.DefaultValue};");
+
+        // Nullability change.
+        if (src.IsNullable != tgt.IsNullable)
+        {
+            if (!src.IsNullable)
+            {
+                // Tightening to NOT NULL — RISKY. Backfill existing NULLs first.
+                if (!string.IsNullOrWhiteSpace(src.DefaultValue))
+                    stmts.Add($"UPDATE {t} SET {c} = {src.DefaultValue} WHERE {c} IS NULL;");
+                else
+                    stmts.Add($"-- backfill required: {table}.{src.Name} has no default; populate NULLs before SET NOT NULL\nALTER TABLE {t} ALTER COLUMN {c} SET NOT NULL;");
+                if (!string.IsNullOrWhiteSpace(src.DefaultValue))
+                    stmts.Add($"ALTER TABLE {t} ALTER COLUMN {c} SET NOT NULL;");
+            }
+            else
+            {
+                // Relaxing to nullable — SAFE.
+                stmts.Add($"ALTER TABLE {t} ALTER COLUMN {c} DROP NOT NULL;");
+            }
+        }
+
+        return string.Join("\n", stmts);
+    }
+
+    /// <summary>
+    /// Renders a full column definition for ADD COLUMN — type (with length/precision),
+    /// nullability, and DEFAULT. Without this the generated DDL drops size/default and
+    /// emits the literal "USER-DEFINED" for enum columns.
+    /// </summary>
+    internal static string RenderColumnDefinition(ColumnDefinition col)
+    {
+        var sb = new StringBuilder();
+        sb.Append($"\"{col.Name}\" {RenderColumnType(col)}");
+        if (!col.IsNullable) sb.Append(" NOT NULL");
+        if (!string.IsNullOrWhiteSpace(col.DefaultValue)) sb.Append($" DEFAULT {col.DefaultValue}");
+        return sb.ToString();
+    }
+
+    private static string RenderColumnType(ColumnDefinition col)
+    {
+        var dt = col.DataType;
+
+        // Enum / composite: data_type is "USER-DEFINED", the real type name is in UdtName.
+        if (string.Equals(dt, "USER-DEFINED", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(col.UdtName))
+            return $"\"{col.UdtName}\"";
+
+        // Arrays: data_type is "ARRAY", UdtName is the element type prefixed with '_' (e.g. "_int4").
+        if (string.Equals(dt, "ARRAY", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(col.UdtName))
+            return $"{col.UdtName.TrimStart('_')}[]";
+
+        // numeric(p,s) / decimal(p,s) — only these carry meaningful precision/scale.
+        if ((string.Equals(dt, "numeric", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(dt, "decimal", StringComparison.OrdinalIgnoreCase))
+            && col.NumericPrecision.HasValue)
+            return col.NumericScale.HasValue
+                ? $"{dt}({col.NumericPrecision},{col.NumericScale})"
+                : $"{dt}({col.NumericPrecision})";
+
+        // varchar(n) / char(n) / bit(n): character_maximum_length populated only for these.
+        if (col.Length.HasValue)
+            return $"{dt}({col.Length})";
+
+        return dt;
     }
 
     private async Task<ComparisonStatus> CompareForeignKeysAsync(
@@ -820,7 +1000,7 @@ public class SchemaComparer : ISchemaComparer
         {
             subResults.Add(new("Columns", ComparisonStatus.MissingInSource,
                 $"Column '{col.Name}' is missing in source",
-                $"ALTER TABLE \"{table.Name}\" ADD COLUMN \"{col.Name}\" {col.DataType} {(col.IsNullable ? "" : "NOT NULL")};"));
+                $"ALTER TABLE \"{table.Name}\" ADD COLUMN {RenderColumnDefinition(col)};"));
         }
 
         foreach (var fk in table.ForeignKeys)

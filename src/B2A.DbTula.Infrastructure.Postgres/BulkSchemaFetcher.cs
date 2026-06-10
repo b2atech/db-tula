@@ -297,6 +297,9 @@ public class BulkSchemaFetcher
               AND a.attnum         > 0
               AND ext.objid        IS NULL
               AND tbl_ext.objid    IS NULL
+              -- Exclude indexes that implement a constraint (unique/PK); those are
+              -- emitted via the constraint path, so listing them here double-creates.
+              AND NOT EXISTS (SELECT 1 FROM pg_constraint con WHERE con.conindid = i.oid)
             ORDER BY t.relname, i.relname, cols.ord;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
