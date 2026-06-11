@@ -85,8 +85,7 @@ pipeline {
             steps {
                 sh '''
                     dotnet test tests/B2A.DbTula.Core.Tests/B2A.DbTula.Core.Tests.csproj \
-                        --configuration Release \
-                        || true
+                        --configuration Release
                 '''
             }
             post {
@@ -96,20 +95,8 @@ pipeline {
             }
         }
 
-        // ── On commit only: apply DB migrations ──────────────────────────
-        stage('Apply DB Migrations') {
-            when { not { triggeredBy 'TimerTrigger' } }
-            steps {
-                sh '''
-                    dotnet ef database update \
-                        --project src/B2A.DbTula.Api/B2A.DbTula.Api.csproj \
-                        --configuration Release \
-                        || echo "Migration warning — check DB connectivity"
-                '''
-            }
-        }
-
         // ── On commit only: deploy to dbtula.dgtula.com ───────────────────
+        // NOTE: DB migrations are applied manually against prod, not in this pipeline.
         // Jenkins runs on the same server — copy files directly, no SSH
         stage('Deploy to dbtula.dgtula.com') {
             when { not { triggeredBy 'TimerTrigger' } }
