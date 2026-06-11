@@ -10,7 +10,7 @@ pipeline {
     triggers {
         // midnight IST daily (nightly comparison) + 1st of month 10am (certbot check)
         cron('30 18 * * *\n0 10 1 * *')
-        pollSCM('H/5 * * * *')      // check for commits every 5 min → deploy
+        githubPush()                // build on a real push to db-tula (webhook-driven), not a timer
     }
 
     environment {
@@ -25,15 +25,10 @@ pipeline {
     stages {
 
         stage('Checkout') {
+            // checkout scm uses the job's configured SCM (same repo/branch/creds), so the built
+            // revision matches what the trigger evaluated — no spurious every-poll rebuilds.
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/b2atech/db-tula.git',
-                        credentialsId: 'bharat-mane-git-personal-token'
-                    ]]
-                ])
+                checkout scm
             }
         }
 
