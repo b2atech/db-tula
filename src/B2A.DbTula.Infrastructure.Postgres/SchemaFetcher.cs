@@ -170,6 +170,8 @@ public class SchemaFetcher
                                ? row["column_default"].ToString() : null,
                 IsIdentity = row["identity_generation"] != DBNull.Value
                              && !string.IsNullOrEmpty(row["identity_generation"].ToString()),
+                IdentityGeneration = row["identity_generation"] != DBNull.Value
+                             ? row["identity_generation"].ToString() : null,
                 IsComputed = row["is_generated"].ToString() == "ALWAYS",
             });
         }

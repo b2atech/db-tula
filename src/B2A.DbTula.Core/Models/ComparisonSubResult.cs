@@ -15,6 +15,18 @@ public class ComparisonSubResult
     public string Details { get; set; } = string.Empty;
     public string CreateScript { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Semantic classification of this difference. Cosmetic/Metadata are equivalent
+    /// behaviour (suppressed from the migration report); Functional/DataIntegrity require action.
+    /// </summary>
+    public DriftCategory Category { get; set; } = DriftCategory.None;
+
+    /// <summary>Risk severity for this specific difference (independent of the parent lint code).</summary>
+    public LintSeverity Severity { get; set; } = LintSeverity.None;
+
+    /// <summary>Whether reconciling this difference needs a schema/data migration.</summary>
+    public bool MigrationRequired { get; set; }
+
     public ComparisonSubResult() { }
 
     public ComparisonSubResult(string component, ComparisonStatus status, string details, string createScript)

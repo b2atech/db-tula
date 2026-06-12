@@ -21,7 +21,10 @@ public class TableDefinition
         // Add normalized columns (sorted by name for order independence)
         foreach (var col in Columns.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
         {
-            var colSig = $"COL:{col.Name.ToLower()}:{col.DataType.ToLower()}:{col.IsNullable}:{col.Length}:{col.DefaultValue?.ToLower() ?? ""}:{col.IsComputed}";
+            // Use NonGenerationDefault so a sequence-backed default (SERIAL) and an
+            // IDENTITY column (no default) don't read as a structural difference — that
+            // generation drift is classified separately by GenerationStrategyAnalyzer.
+            var colSig = $"COL:{col.Name.ToLower()}:{col.DataType.ToLower()}:{col.IsNullable}:{col.Length}:{col.NonGenerationDefault?.ToLower() ?? ""}:{col.IsComputed}";
             elements.Add(colSig);
         }
         
