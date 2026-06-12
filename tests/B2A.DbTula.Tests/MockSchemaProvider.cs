@@ -1,4 +1,5 @@
 using B2a.DbTula.Core.Abstractions;
+using B2A.DbTula.Core.Enums;
 using B2A.DbTula.Core.Models;
 
 namespace B2A.DbTula.Tests;
@@ -8,6 +9,11 @@ namespace B2A.DbTula.Tests;
 /// </summary>
 public class MockSchemaProvider : IDatabaseSchemaProvider
 {
+    public DbProviderKind ProviderKind { get; set; } = DbProviderKind.Postgres;
+
+    public Task<HashSet<string>> GetMaterializedViewNamesAsync() =>
+        Task.FromResult(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
     public List<string> Tables { get; set; } = new();
     public Dictionary<string, TableDefinition> TableDefs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<DbFunctionDefinition> Functions { get; set; } = new();

@@ -155,6 +155,7 @@ public class BulkSchemaFetcher
                     DateTimePrecision = r["datetime_precision"] != DBNull.Value ? Convert.ToInt32(r["datetime_precision"]) : null,
                     DefaultValue      = r["column_default"] != DBNull.Value ? r["column_default"].ToString() : null,
                     IsIdentity        = r["identity_generation"] != DBNull.Value && !string.IsNullOrEmpty(r["identity_generation"].ToString()),
+                    IdentityGeneration = r["identity_generation"] != DBNull.Value ? r["identity_generation"].ToString() : null,
                     IsComputed        = r["is_generated"].ToString() == "ALWAYS",
                 }).ToList(),
                 StringComparer.OrdinalIgnoreCase);

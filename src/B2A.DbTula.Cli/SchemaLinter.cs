@@ -40,6 +40,12 @@ public static class SchemaLinter
     private const string BC101 = "BC101";
     private const string BC102 = "BC102";
 
+    // ── Value-generation drift (DbTula semantic identity/serial/sequence analysis) ──
+    // GN101: IDENTITY/SERIAL generation present on one side only, or ALWAYS vs BY DEFAULT
+    // GN201: sequence current value trails MAX(column) — data-integrity risk
+    private const string GN101 = "GN101";
+    private const string GN201 = "GN201";
+
     public static void Annotate(IList<ComparisonResult> results)
     {
         foreach (var result in results)
@@ -104,6 +110,14 @@ public static class SchemaLinter
                     EscalateIfHigher(result, MF104, LintSeverity.Warning,
                         $"MF104: {sub.Details} — modifying to NOT NULL may fail if column contains NULLs");
                 }
+
+                // GN101/GN201: value-generation drift classified by GenerationStrategyAnalyzer.
+                if (sub.Category == DriftCategory.Functional)
+                    EscalateIfHigher(result, GN101, LintSeverity.Warning,
+                        $"GN101: {sub.Details} — auto-key-generation behaviour differs between environments");
+                else if (sub.Category == DriftCategory.DataIntegrity)
+                    EscalateIfHigher(result, GN201, LintSeverity.Error,
+                        $"GN201: {sub.Details} — sequence out of sync; inserts may raise duplicate key violations");
             }
 
             // CD101: foreign key being dropped

@@ -2,6 +2,7 @@
 using B2A.DbTula.Core.Abstractions;
 using B2A.DbTula.Core.Enums;
 using B2A.DbTula.Core.Models;
+using B2A.DbTula.Core.Semantics;
 using B2A.DbTula.Core.Utilities;
 using B2A.DbTula.Cli.Services;
 using System.Text;
@@ -454,12 +455,35 @@ public class SchemaComparer : ISchemaComparer
                 subResults.Add(new("Columns", ComparisonStatus.MissingInTarget, $"Column '{col.Name}' is missing in target.",
                     $"ALTER TABLE \"{source.Name}\" ADD COLUMN {RenderColumnDefinition(col)};"));
             }
-            else if (!col.Equals(tgt))
+            else
             {
-                status = ComparisonStatus.Mismatch;
-                subResults.Add(new("Columns", ComparisonStatus.Mismatch,
-                    $"Column '{col.Name}' differs — {DescribeColumnDifference(col, tgt)}",
-                    BuildColumnAlterStatements(source.Name, col, tgt)));
+                // Generation drift (IDENTITY / SERIAL / sequence default) is classified
+                // semantically and reported separately so equivalent strategies (Case B/C)
+                // no longer surface as a false-positive "identity: source=True target=False".
+                var gen = GenerationStrategyAnalyzer.Analyze(source.Name, col, tgt);
+                if (gen.IsDrift)
+                {
+                    var blocking = gen.Category is DriftCategory.Functional or DriftCategory.DataIntegrity;
+                    subResults.Add(new("Columns",
+                        blocking ? ComparisonStatus.Mismatch : ComparisonStatus.Match,
+                        $"Column '{col.Name}' generation — {gen.Category}: {gen.Reason}",
+                        gen.MigrationScript ?? string.Empty)
+                    {
+                        Category = gen.Category,
+                        Severity = gen.Risk,
+                        MigrationRequired = gen.MigrationRequired
+                    });
+                    if (blocking) status = ComparisonStatus.Mismatch;
+                }
+
+                // Compare everything except value-generation (handled above).
+                if (!col.EqualsIgnoringGeneration(tgt))
+                {
+                    status = ComparisonStatus.Mismatch;
+                    subResults.Add(new("Columns", ComparisonStatus.Mismatch,
+                        $"Column '{col.Name}' differs — {DescribeColumnDifference(col, tgt)}",
+                        BuildColumnAlterStatements(source.Name, col, tgt)));
+                }
             }
         }
 
@@ -518,14 +542,14 @@ public class SchemaComparer : ISchemaComparer
             diffs.Add($"type: source={s.DataType} target={t.DataType}");
         if (s.IsNullable != t.IsNullable)
             diffs.Add($"nullable: source={(s.IsNullable ? "YES" : "NO")} target={(t.IsNullable ? "YES" : "NO")}");
-        if (!string.Equals(s.DefaultValue ?? "", t.DefaultValue ?? "", StringComparison.OrdinalIgnoreCase))
-            diffs.Add($"default: source={s.DefaultValue ?? "none"} target={t.DefaultValue ?? "none"}");
+        // Compare literal defaults only — sequence-backed (SERIAL) defaults are generation
+        // drift, classified by GenerationStrategyAnalyzer, not a plain default difference.
+        if (!string.Equals(s.NonGenerationDefault ?? "", t.NonGenerationDefault ?? "", StringComparison.OrdinalIgnoreCase))
+            diffs.Add($"default: source={s.NonGenerationDefault ?? "none"} target={t.NonGenerationDefault ?? "none"}");
         if (s.Length != t.Length)
             diffs.Add($"length: source={s.Length?.ToString() ?? "-"} target={t.Length?.ToString() ?? "-"}");
         if (s.NumericPrecision != t.NumericPrecision || s.NumericScale != t.NumericScale)
             diffs.Add($"precision: source=({s.NumericPrecision},{s.NumericScale}) target=({t.NumericPrecision},{t.NumericScale})");
-        if (s.IsIdentity != t.IsIdentity)
-            diffs.Add($"identity: source={s.IsIdentity} target={t.IsIdentity}");
         if (s.IsComputed != t.IsComputed)
             diffs.Add($"computed: source={s.IsComputed} target={t.IsComputed}");
         return diffs.Count > 0 ? string.Join("; ", diffs) : "definition differs";
@@ -553,11 +577,12 @@ public class SchemaComparer : ISchemaComparer
             stmts.Add($"ALTER TABLE {t} ALTER COLUMN {c} TYPE {newType} USING {c}::text::{newType};");
         }
 
-        // Default change — SAFE (metadata only).
-        if (!string.Equals(src.DefaultValue ?? "", tgt.DefaultValue ?? "", StringComparison.OrdinalIgnoreCase))
-            stmts.Add(string.IsNullOrWhiteSpace(src.DefaultValue)
+        // Default change — SAFE (metadata only). Sequence-backed defaults are excluded
+        // (handled as generation drift), so only literal defaults are aligned here.
+        if (!string.Equals(src.NonGenerationDefault ?? "", tgt.NonGenerationDefault ?? "", StringComparison.OrdinalIgnoreCase))
+            stmts.Add(string.IsNullOrWhiteSpace(src.NonGenerationDefault)
                 ? $"ALTER TABLE {t} ALTER COLUMN {c} DROP DEFAULT;"
-                : $"ALTER TABLE {t} ALTER COLUMN {c} SET DEFAULT {src.DefaultValue};");
+                : $"ALTER TABLE {t} ALTER COLUMN {c} SET DEFAULT {src.NonGenerationDefault};");
 
         // Nullability change.
         if (src.IsNullable != tgt.IsNullable)
