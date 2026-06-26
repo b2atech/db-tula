@@ -9,7 +9,7 @@ pipeline {
 
     triggers {
         // midnight IST daily (nightly comparison) + 1st of month 10am (certbot check)
-        cron('30 18 * * *\n0 10 1 * *')
+        cron('TZ=Asia/Kolkata\n0 0 * * *\n0 10 1 * *')
         githubPush()                // build on a real push to db-tula (webhook-driven), not a timer
     }
 
@@ -19,7 +19,6 @@ pipeline {
         DBTULA_SMTP_PORT    = '587'
         DBTULA_SMTP_USE_SSL = 'true'
         APP_SERVER      = 'ubuntu@57.129.74.139'
-        IS_CRON         = "${currentBuild.getBuildCauses('hudson.triggers.TimerTrigger') ? 'true' : 'false'}"
     }
 
     stages {
@@ -36,6 +35,7 @@ pipeline {
         stage('Build CLI') {
             steps {
                 sh '''
+                    set -e
                     dotnet publish src/B2A.DbTula.Cli/B2A.DbTula.Cli.csproj \
                         --configuration Release \
                         --runtime linux-x64 \
@@ -52,6 +52,7 @@ pipeline {
             when { not { triggeredBy 'TimerTrigger' } }
             steps {
                 sh '''
+                    set -e
                     # /m:1 limits MSBuild to 1 worker — prevents OOM on low-RAM server
                     MSBUILDDISABLENODEREUSE=1 dotnet publish src/B2A.DbTula.Api/B2A.DbTula.Api.csproj \
                         --configuration Release \
@@ -71,6 +72,7 @@ pipeline {
                     string(credentialsId: 'VITE_GOOGLE_CLIENT_ID', variable: 'VITE_GOOGLE_CLIENT_ID'),
                 ]) {
                     sh '''
+                        set -e
                         cd web/dbtula-web
                         npm install
                         npm run build
@@ -84,6 +86,7 @@ pipeline {
             when { not { triggeredBy 'TimerTrigger' } }
             steps {
                 sh '''
+                    set -e
                     dotnet test tests/B2A.DbTula.Core.Tests/B2A.DbTula.Core.Tests.csproj \
                         --configuration Release
                 '''
@@ -102,6 +105,7 @@ pipeline {
             when { not { triggeredBy 'TimerTrigger' } }
             steps {
                 sh '''
+                    set -e
                     umask 022
 
                     echo "=== Deploying API ==="
@@ -136,9 +140,9 @@ pipeline {
                     string(credentialsId: 'CONNECTIONSTRINGS__PAYROLLDB_PROD',  variable: 'PAYROLLDB_PROD'),
                     string(credentialsId: 'CONNECTIONSTRINGS__PURCHASEDB_PROD', variable: 'PURCHASEDB_PROD'),
                     string(credentialsId: 'CONNECTIONSTRINGS__SALESDB_PROD',    variable: 'SALESDB_PROD'),
-                    string(credentialsId: 'DBTULA_SMTP_USER', variable: 'DBTULA_SMTP_USER'),
-                    string(credentialsId: 'DBTULA_SMTP_PASS', variable: 'DBTULA_SMTP_PASS'),
-                    string(credentialsId: 'DBTULA_SMTP_TO',   variable: 'DBTULA_SMTP_TO'),
+                    string(credentialsId: 'DBTULA_SMTP_USER',variable: 'DBTULA_SMTP_USER'),
+                    string(credentialsId: 'DBTULA_SMTP_PASS',variable: 'DBTULA_SMTP_PASS'),
+                    string(credentialsId: 'DBTULA_SMTP_TO',  variable: 'DBTULA_SMTP_TO'),
                 ]) {
                     script {
                         env.DBTULA_SMTP_FROM = env.DBTULA_SMTP_USER
@@ -174,9 +178,12 @@ pipeline {
                                 -X POST "http://57.129.74.139/api/scheduled/trigger-all" \
                                 -H "X-Api-Key: ${DBTULA_API_KEY}"
                         ''').trim()
-                        echo code == '200'
-                            ? "✅ UI dashboard queued all 9 comparison runs"
-                            : "⚠️  UI trigger returned HTTP ${code}"
+
+                        if (code == '200') {
+                            echo "✅ UI dashboard queued all 9 comparison runs"
+                        } else {
+                            echo "⚠️  UI trigger returned HTTP ${code}"
+                        }
                     }
                 }
             }
@@ -187,7 +194,7 @@ pipeline {
             when {
                 allOf {
                     triggeredBy 'TimerTrigger'
-                    expression { new Date().date == 1 }
+                    expression { new Date().format('d', TimeZone.getTimeZone('Asia/Kolkata')) == '1' }
                 }
             }
             steps {
