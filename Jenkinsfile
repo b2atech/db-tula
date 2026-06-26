@@ -14,11 +14,12 @@ pipeline {
     }
 
     environment {
-        DBTULA          = './publish/B2A.DbTula.Cli'
+        DBTULA              = './publish/B2A.DbTula.Cli'
         DBTULA_SMTP_HOST    = 'smtp.gmail.com'
         DBTULA_SMTP_PORT    = '587'
         DBTULA_SMTP_USE_SSL = 'true'
-        APP_SERVER      = 'ubuntu@57.129.74.139'
+        APP_SERVER          = 'ubuntu@57.129.74.139'
+        IS_CRON             = "${currentBuild.getBuildCauses('hudson.triggers.TimerTrigger') ? 'true' : 'false'}"
     }
 
     stages {
@@ -140,9 +141,9 @@ pipeline {
                     string(credentialsId: 'CONNECTIONSTRINGS__PAYROLLDB_PROD',  variable: 'PAYROLLDB_PROD'),
                     string(credentialsId: 'CONNECTIONSTRINGS__PURCHASEDB_PROD', variable: 'PURCHASEDB_PROD'),
                     string(credentialsId: 'CONNECTIONSTRINGS__SALESDB_PROD',    variable: 'SALESDB_PROD'),
-                    string(credentialsId: 'DBTULA_SMTP_USER',variable: 'DBTULA_SMTP_USER'),
-                    string(credentialsId: 'DBTULA_SMTP_PASS',variable: 'DBTULA_SMTP_PASS'),
-                    string(credentialsId: 'DBTULA_SMTP_TO',  variable: 'DBTULA_SMTP_TO'),
+                    string(credentialsId: 'DBTULA_SMTP_USER', variable: 'DBTULA_SMTP_USER'),
+                    string(credentialsId: 'DBTULA_SMTP_PASS', variable: 'DBTULA_SMTP_PASS'),
+                    string(credentialsId: 'DBTULA_SMTP_TO',   variable: 'DBTULA_SMTP_TO'),
                 ]) {
                     script {
                         env.DBTULA_SMTP_FROM = env.DBTULA_SMTP_USER
