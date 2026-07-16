@@ -76,9 +76,9 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider, IDatabaseSchemaSn
     {
         return await _fetcher.GetIndexesListAsync(tableName);
     }
-    public async Task<string?> GetIndexCreateScriptAsync(string indexName)
+    public async Task<string?> GetIndexCreateScriptAsync(string tableName, string indexName)
     {
-        return await _fetcher.GetIndexCreateScriptAsync(indexName);
+        return await _fetcher.GetIndexCreateScriptAsync(tableName, indexName);
     }
     public async Task<IList<DbFunctionDefinition>> GetFunctionsAsync()
     {
@@ -164,14 +164,22 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider, IDatabaseSchemaSn
     public Task<SchemaSnapshot> TakeSnapshotAsync(CancellationToken ct = default)
         => _bulkFetcher.TakeSnapshotAsync(ct);
 
+    // System schemas excluded from every scan so only user-created schemas are compared.
+    private const string SystemSchemaFilter =
+        "NOT IN ('pg_catalog', 'information_schema', 'pg_toast') " +
+        "AND {0} NOT LIKE 'pg_temp_%' AND {0} NOT LIKE 'pg_toast_temp_%'";
+
+    private static string ExcludeSystemSchemas(string column) =>
+        $"{column} {string.Format(SystemSchemaFilter, column)}";
+
     public async Task<IList<DbViewDefinition>> GetViewsAsync()
     {
-        const string sql = @"
-        SELECT 
-            table_name AS view_name, 
-            view_definition 
-        FROM information_schema.views 
-        WHERE table_schema = 'public';
+        string sql = $@"
+        SELECT
+            table_schema || '.' || table_name AS view_name,
+            view_definition
+        FROM information_schema.views
+        WHERE {ExcludeSystemSchemas("table_schema")};
     ";
 
         var dataTable = await _connection.ExecuteQueryAsync(sql);
@@ -191,15 +199,15 @@ public class PostgresSchemaProvider : IDatabaseSchemaProvider, IDatabaseSchemaSn
 
     public async Task<IList<DbTriggerDefinition>> GetTriggersAsync()
     {
-        const string sql = @"
-        SELECT 
+        string sql = $@"
+        SELECT
             trg.tgname AS trigger_name,
-            tbl.relname AS table_name,
+            ns.nspname || '.' || tbl.relname AS table_name,
             pg_get_triggerdef(trg.oid, true) AS definition
         FROM pg_trigger trg
         JOIN pg_class tbl ON tbl.oid = trg.tgrelid
         JOIN pg_namespace ns ON ns.oid = tbl.relnamespace
-        WHERE ns.nspname = 'public'
+        WHERE {ExcludeSystemSchemas("ns.nspname")}
           AND NOT trg.tgisinternal;
     ";
 

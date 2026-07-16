@@ -25,7 +25,7 @@ public interface IDatabaseSchemaProvider
     Task<TableDefinition> GetTableDefinitionAsync(string tableName);
     Task<string?> GetPrimaryKeyCreateScriptAsync(string tableName);
     Task<string?> GetForeignKeyCreateScriptAsync(string tableName, string foreignKeyName);
-    Task<string?> GetIndexCreateScriptAsync(string indexName);
+    Task<string?> GetIndexCreateScriptAsync(string tableName, string indexName);
     Task<IList<DbViewDefinition>> GetViewsAsync();
     Task<string?> GetViewDefinitionAsync(string viewName);
     Task<IList<DbTriggerDefinition>> GetTriggersAsync();

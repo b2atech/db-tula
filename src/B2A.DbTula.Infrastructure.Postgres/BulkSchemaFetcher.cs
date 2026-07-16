@@ -7,6 +7,11 @@ namespace B2A.DbTula.Infrastructure.Postgres;
 /// Fetches the complete schema for one Postgres database using ~13 parallel bulk queries.
 /// Requires Postgres 11+ for index INCLUDE column support.
 ///
+/// Scans every user schema in the database (not just `public`) — system schemas
+/// (pg_catalog, information_schema, pg_toast, pg_temp_*, pg_toast_temp_*) are excluded.
+/// Every object name is returned schema-qualified as "schema.object" so same-named
+/// objects in different schemas (e.g. public.agent_cache vs agent.agent_cache) never collide.
+///
 /// Key improvements from open-source tools:
 ///  - Extension filtering (schemainspect): pg_depend deptype='e' excludes all extension-owned objects
 ///    (PostGIS tables, pgcrypto functions, etc.) from every query, preventing false positives.
@@ -19,6 +24,16 @@ namespace B2A.DbTula.Infrastructure.Postgres;
 public class BulkSchemaFetcher
 {
     private readonly DatabaseConnection _connection;
+
+    // System schemas excluded from every scan so only user-created schemas are compared.
+    private const string SystemSchemaFilter =
+        "NOT IN ('pg_catalog', 'information_schema', 'pg_toast') " +
+        "AND {0} NOT LIKE 'pg_temp_%' AND {0} NOT LIKE 'pg_toast_temp_%'";
+
+    private static string ExcludeSystemSchemas(string column) =>
+        $"{column} {string.Format(SystemSchemaFilter, column)}";
+
+    private static string Qualify(object? schema, object? name) => $"{schema}.{name}";
 
     public BulkSchemaFetcher(DatabaseConnection connection)
     {
@@ -85,23 +100,22 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyList<string>> FetchTableNamesAsync()
     {
-        const string sql = @"
-            SELECT pc.relname AS table_name
+        string sql = $@"
+            SELECT pn.nspname AS table_schema, pc.relname AS table_name
             FROM pg_class pc
             JOIN pg_namespace pn ON pn.oid = pc.relnamespace
             LEFT JOIN pg_depend ext
                 ON ext.classid = 'pg_class'::regclass
                AND ext.objid   = pc.oid
                AND ext.deptype = 'e'
-            WHERE pn.nspname = 'public'
+            WHERE {ExcludeSystemSchemas("pn.nspname")}
               AND pc.relkind  IN ('r', 'p')
               AND ext.objid   IS NULL
-            ORDER BY pc.relname;";
+            ORDER BY pn.nspname, pc.relname;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
         return dt.AsEnumerable()
-            .Select(r => r["table_name"].ToString() ?? string.Empty)
-            .Where(n => !string.IsNullOrEmpty(n))
+            .Select(r => Qualify(r["table_schema"], r["table_name"]))
             .ToList();
     }
 
@@ -109,8 +123,12 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyDictionary<string, List<ColumnDefinition>>> FetchAllColumnsAsync()
     {
-        const string sql = @"
+        // pc/pn correlated to c by BOTH name and schema — a name-only join would
+        // cross-attribute columns when the same table name exists in two schemas
+        // (e.g. public.agent_cache and agent.agent_cache).
+        string sql = $@"
             SELECT
+                c.table_schema,
                 c.table_name,
                 c.column_name,
                 c.ordinal_position,
@@ -125,22 +143,21 @@ public class BulkSchemaFetcher
                 c.is_generated,
                 c.identity_generation
             FROM information_schema.columns c
-            JOIN pg_class pc ON pc.relname = c.table_name
-            JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+            JOIN pg_namespace pn ON pn.nspname = c.table_schema
+            JOIN pg_class pc ON pc.relname = c.table_name AND pc.relnamespace = pn.oid
             LEFT JOIN pg_depend ext
                 ON ext.classid = 'pg_class'::regclass
                AND ext.objid   = pc.oid
                AND ext.deptype = 'e'
-            WHERE c.table_schema = 'public'
-              AND pn.nspname     = 'public'
+            WHERE {ExcludeSystemSchemas("c.table_schema")}
               AND pc.relkind     IN ('r', 'p')
               AND ext.objid      IS NULL
-            ORDER BY c.table_name, c.ordinal_position;";
+            ORDER BY c.table_schema, c.table_name, c.ordinal_position;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
 
         return dt.AsEnumerable()
-            .GroupBy(r => r["table_name"].ToString() ?? string.Empty)
+            .GroupBy(r => Qualify(r["table_schema"], r["table_name"]))
             .ToDictionary(
                 g => g.Key,
                 g => g.Select(r => new ColumnDefinition
@@ -165,8 +182,9 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyDictionary<string, List<PrimaryKeyDefinition>>> FetchAllPrimaryKeysAsync()
     {
-        const string sql = @"
+        string sql = $@"
             SELECT
+                ns.nspname AS table_schema,
                 rel.relname AS table_name,
                 con.conname AS constraint_name,
                 att.attname AS column_name,
@@ -180,14 +198,14 @@ public class BulkSchemaFetcher
                AND ext.objid   = rel.oid
                AND ext.deptype = 'e'
             WHERE con.contype = 'p'
-              AND ns.nspname  = 'public'
+              AND {ExcludeSystemSchemas("ns.nspname")}
               AND ext.objid   IS NULL
-            ORDER BY rel.relname, con.conname, column_position;";
+            ORDER BY ns.nspname, rel.relname, con.conname, column_position;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
 
         return dt.AsEnumerable()
-            .GroupBy(r => r["table_name"].ToString() ?? string.Empty)
+            .GroupBy(r => Qualify(r["table_schema"], r["table_name"]))
             .ToDictionary(
                 g => g.Key,
                 g => g.GroupBy(r => r["constraint_name"].ToString() ?? string.Empty)
@@ -205,11 +223,15 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyDictionary<string, List<ForeignKeyDefinition>>> FetchAllForeignKeysAsync()
     {
-        const string sql = @"
+        // ref_ns is the REFERENCED table's own namespace — a FK can legitimately point
+        // at a table in a different schema than the one it's defined on.
+        string sql = $@"
             SELECT
+                ns.nspname AS table_schema,
                 rel.relname AS table_name,
                 con.conname AS constraint_name,
                 src_att.attname AS column_name,
+                ref_ns.nspname AS referenced_schema,
                 ref_rel.relname AS referenced_table,
                 ref_att.attname AS referenced_column,
                 src.ord AS column_position,
@@ -225,6 +247,7 @@ public class BulkSchemaFetcher
             JOIN pg_class rel     ON rel.oid = con.conrelid
             JOIN pg_namespace ns  ON ns.oid  = rel.relnamespace
             JOIN pg_class ref_rel ON ref_rel.oid = con.confrelid
+            JOIN pg_namespace ref_ns ON ref_ns.oid = ref_rel.relnamespace
             JOIN LATERAL unnest(con.conkey)  WITH ORDINALITY AS src(attnum, ord) ON true
             JOIN LATERAL unnest(con.confkey) WITH ORDINALITY AS ref(attnum, ord) ON ref.ord = src.ord
             JOIN pg_attribute src_att ON src_att.attrelid = con.conrelid  AND src_att.attnum = src.attnum
@@ -234,14 +257,14 @@ public class BulkSchemaFetcher
                AND ext.objid   = rel.oid
                AND ext.deptype = 'e'
             WHERE con.contype = 'f'
-              AND ns.nspname  = 'public'
+              AND {ExcludeSystemSchemas("ns.nspname")}
               AND ext.objid   IS NULL
-            ORDER BY rel.relname, con.conname, src.ord;";
+            ORDER BY ns.nspname, rel.relname, con.conname, src.ord;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
 
         return dt.AsEnumerable()
-            .GroupBy(r => r["table_name"].ToString() ?? string.Empty)
+            .GroupBy(r => Qualify(r["table_schema"], r["table_name"]))
             .ToDictionary(
                 g => g.Key,
                 g => g.GroupBy(r => r["constraint_name"].ToString() ?? string.Empty)
@@ -252,7 +275,7 @@ public class BulkSchemaFetcher
                            {
                                Name             = cg.Key,
                                ColumnName       = string.Join(",", cg.Select(r => r["column_name"].ToString())),
-                               ReferencedTable  = first["referenced_table"].ToString() ?? string.Empty,
+                               ReferencedTable  = Qualify(first["referenced_schema"], first["referenced_table"]),
                                ReferencedColumn = string.Join(",", cg.Select(r => r["referenced_column"].ToString())),
                                OnUpdate         = first["on_update"].ToString() ?? "NO ACTION",
                                OnDelete         = first["on_delete"].ToString() ?? "NO ACTION",
@@ -267,8 +290,9 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyDictionary<string, List<IndexDefinition>>> FetchAllIndexesAsync()
     {
-        const string sql = @"
+        string sql = $@"
             SELECT
+                ns.nspname AS table_schema,
                 t.relname  AS table_name,
                 i.relname  AS index_name,
                 am.amname  AS index_type,
@@ -292,7 +316,7 @@ public class BulkSchemaFetcher
                 ON tbl_ext.classid = 'pg_class'::regclass
                AND tbl_ext.objid   = t.oid
                AND tbl_ext.deptype = 'e'
-            WHERE ns.nspname       = 'public'
+            WHERE {ExcludeSystemSchemas("ns.nspname")}
               AND ix.indisvalid    = true
               AND ix.indisprimary  = false
               AND a.attnum         > 0
@@ -301,12 +325,12 @@ public class BulkSchemaFetcher
               -- Exclude indexes that implement a constraint (unique/PK); those are
               -- emitted via the constraint path, so listing them here double-creates.
               AND NOT EXISTS (SELECT 1 FROM pg_constraint con WHERE con.conindid = i.oid)
-            ORDER BY t.relname, i.relname, cols.ord;";
+            ORDER BY ns.nspname, t.relname, i.relname, cols.ord;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
 
         return dt.AsEnumerable()
-            .GroupBy(r => r["table_name"].ToString() ?? string.Empty)
+            .GroupBy(r => Qualify(r["table_schema"], r["table_name"]))
             .ToDictionary(
                 g => g.Key,
                 g => g.GroupBy(r => r["index_name"].ToString() ?? string.Empty)
@@ -333,8 +357,9 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyDictionary<string, List<UniqueConstraintDefinition>>> FetchAllUniqueConstraintsAsync()
     {
-        const string sql = @"
+        string sql = $@"
             SELECT
+                ns.nspname AS table_schema,
                 rel.relname AS table_name,
                 con.conname AS constraint_name,
                 att.attname AS column_name,
@@ -348,14 +373,14 @@ public class BulkSchemaFetcher
                AND ext.objid   = rel.oid
                AND ext.deptype = 'e'
             WHERE con.contype = 'u'
-              AND ns.nspname  = 'public'
+              AND {ExcludeSystemSchemas("ns.nspname")}
               AND ext.objid   IS NULL
-            ORDER BY rel.relname, con.conname, column_position;";
+            ORDER BY ns.nspname, rel.relname, con.conname, column_position;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
 
         return dt.AsEnumerable()
-            .GroupBy(r => r["table_name"].ToString() ?? string.Empty)
+            .GroupBy(r => Qualify(r["table_schema"], r["table_name"]))
             .ToDictionary(
                 g => g.Key,
                 g => g.GroupBy(r => r["constraint_name"].ToString() ?? string.Empty)
@@ -375,8 +400,9 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyDictionary<string, List<CheckConstraintDefinition>>> FetchAllCheckConstraintsAsync()
     {
-        const string sql = @"
+        string sql = $@"
             SELECT
+                ns.nspname AS table_schema,
                 rel.relname AS table_name,
                 con.conname AS constraint_name,
                 pg_get_constraintdef(con.oid, true) AS check_clause,
@@ -389,15 +415,15 @@ public class BulkSchemaFetcher
                AND ext.objid   = rel.oid
                AND ext.deptype = 'e'
             WHERE con.contype   = 'c'
-              AND ns.nspname    = 'public'
+              AND {ExcludeSystemSchemas("ns.nspname")}
               AND con.conislocal = true
               AND ext.objid     IS NULL
-            ORDER BY rel.relname, con.conname;";
+            ORDER BY ns.nspname, rel.relname, con.conname;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
 
         return dt.AsEnumerable()
-            .GroupBy(r => r["table_name"].ToString() ?? string.Empty)
+            .GroupBy(r => Qualify(r["table_schema"], r["table_name"]))
             .ToDictionary(
                 g => g.Key,
                 g => g.Select(r => new CheckConstraintDefinition
@@ -415,14 +441,15 @@ public class BulkSchemaFetcher
     private async Task<IReadOnlyList<DbFunctionDefinition>> FetchAllFunctionsAsync()
     {
         // NOT EXISTS pattern (from schemainspect/pgquarrel) — unambiguous, avoids LEFT JOIN fan-out
-        const string sql = @"
+        string sql = $@"
             SELECT
+                n.nspname AS routine_schema,
                 p.proname AS routine_name,
                 pg_get_function_identity_arguments(p.oid) AS arguments,
                 pg_get_functiondef(p.oid) AS definition
             FROM pg_proc p
             JOIN pg_namespace n ON p.pronamespace = n.oid
-            WHERE n.nspname = 'public'
+            WHERE {ExcludeSystemSchemas("n.nspname")}
               AND p.prokind = 'f'
               AND NOT EXISTS (
                   SELECT 1 FROM pg_depend d
@@ -436,14 +463,15 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyList<DbFunctionDefinition>> FetchAllProceduresAsync()
     {
-        const string sql = @"
+        string sql = $@"
             SELECT
+                n.nspname AS routine_schema,
                 p.proname AS routine_name,
                 pg_get_function_identity_arguments(p.oid) AS arguments,
                 pg_get_functiondef(p.oid) AS definition
             FROM pg_proc p
             JOIN pg_namespace n ON p.pronamespace = n.oid
-            WHERE n.nspname = 'public'
+            WHERE {ExcludeSystemSchemas("n.nspname")}
               AND p.prokind = 'p'
               AND NOT EXISTS (
                   SELECT 1 FROM pg_depend d
@@ -461,7 +489,7 @@ public class BulkSchemaFetcher
         return dt.AsEnumerable()
             .Select(r => new DbFunctionDefinition
             {
-                Name       = r["routine_name"].ToString(),
+                Name       = Qualify(r["routine_schema"], r["routine_name"]),
                 Arguments  = r["arguments"]?.ToString(),
                 Definition = r["definition"]?.ToString(),
             }).ToList();
@@ -471,8 +499,9 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyList<DbViewDefinition>> FetchAllViewsAsync()
     {
-        const string sql = @"
+        string sql = $@"
             SELECT
+                n.nspname AS view_schema,
                 c.relname AS view_name,
                 pg_get_viewdef(c.oid, true) AS definition
             FROM pg_class c
@@ -482,15 +511,15 @@ public class BulkSchemaFetcher
                AND ext.objid   = c.oid
                AND ext.deptype = 'e'
             WHERE c.relkind = 'v'
-              AND n.nspname = 'public'
+              AND {ExcludeSystemSchemas("n.nspname")}
               AND ext.objid IS NULL
-            ORDER BY c.relname;";
+            ORDER BY n.nspname, c.relname;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
         return dt.AsEnumerable()
             .Select(r => new DbViewDefinition
             {
-                Name       = r["view_name"].ToString() ?? string.Empty,
+                Name       = Qualify(r["view_schema"], r["view_name"]),
                 Definition = r["definition"] != DBNull.Value ? r["definition"]?.ToString() : null,
             }).ToList();
     }
@@ -499,9 +528,10 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyList<DbTriggerDefinition>> FetchAllTriggersAsync()
     {
-        const string sql = @"
+        string sql = $@"
             SELECT
                 trg.tgname  AS trigger_name,
+                ns.nspname  AS table_schema,
                 tbl.relname AS table_name,
                 pg_get_triggerdef(trg.oid, true) AS definition
             FROM pg_trigger trg
@@ -511,17 +541,17 @@ public class BulkSchemaFetcher
                 ON ext.classid = 'pg_trigger'::regclass
                AND ext.objid   = trg.oid
                AND ext.deptype = 'e'
-            WHERE ns.nspname      = 'public'
+            WHERE {ExcludeSystemSchemas("ns.nspname")}
               AND NOT trg.tgisinternal
               AND ext.objid       IS NULL
-            ORDER BY tbl.relname, trg.tgname;";
+            ORDER BY ns.nspname, tbl.relname, trg.tgname;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
         return dt.AsEnumerable()
             .Select(r => new DbTriggerDefinition
             {
                 Name       = r["trigger_name"].ToString() ?? string.Empty,
-                Table      = r["table_name"].ToString() ?? string.Empty,
+                Table      = Qualify(r["table_schema"], r["table_name"]),
                 Definition = r["definition"] != DBNull.Value ? r["definition"]?.ToString() : null,
             }).ToList();
     }
@@ -534,8 +564,9 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyList<DbSequenceDefinition>> FetchAllSequencesAsync()
     {
-        const string sql = @"
+        string sql = $@"
             SELECT
+                s.schemaname,
                 s.sequencename,
                 s.data_type,
                 s.start_value,
@@ -545,8 +576,9 @@ public class BulkSchemaFetcher
                 s.cache_size,
                 s.cycle
             FROM pg_sequences s
+            JOIN pg_namespace sn ON sn.nspname = s.schemaname
             JOIN pg_class sc ON sc.relname = s.sequencename
-                             AND sc.relnamespace = 'public'::regnamespace
+                             AND sc.relnamespace = sn.oid
             LEFT JOIN pg_depend identity_dep
                 ON identity_dep.objid   = sc.oid
                AND identity_dep.deptype = 'i'
@@ -554,16 +586,16 @@ public class BulkSchemaFetcher
                 ON ext.classid = 'pg_class'::regclass
                AND ext.objid   = sc.oid
                AND ext.deptype = 'e'
-            WHERE s.schemaname       = 'public'
+            WHERE {ExcludeSystemSchemas("s.schemaname")}
               AND identity_dep.objid IS NULL
               AND ext.objid          IS NULL
-            ORDER BY s.sequencename;";
+            ORDER BY s.schemaname, s.sequencename;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
         return dt.AsEnumerable()
             .Select(r => new DbSequenceDefinition
             {
-                Name        = r["sequencename"].ToString() ?? string.Empty,
+                Name        = Qualify(r["schemaname"], r["sequencename"]),
                 DataType    = r["data_type"].ToString() ?? "bigint",
                 StartValue  = Convert.ToInt64(r["start_value"]),
                 IncrementBy = Convert.ToInt64(r["increment_by"]),
@@ -579,8 +611,9 @@ public class BulkSchemaFetcher
 
     private async Task<IReadOnlyList<EnumTypeDefinition>> FetchAllEnumsAsync()
     {
-        const string sql = @"
+        string sql = $@"
             SELECT
+                n.nspname       AS type_schema,
                 t.typname       AS enum_name,
                 e.enumlabel     AS enum_value,
                 e.enumsortorder AS sort_order
@@ -592,14 +625,14 @@ public class BulkSchemaFetcher
                AND ext.objid   = t.oid
                AND ext.deptype = 'e'
             WHERE t.typtype = 'e'
-              AND n.nspname = 'public'
+              AND {ExcludeSystemSchemas("n.nspname")}
               AND ext.objid IS NULL
-            ORDER BY t.typname, e.enumsortorder;";
+            ORDER BY n.nspname, t.typname, e.enumsortorder;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
 
         return dt.AsEnumerable()
-            .GroupBy(r => r["enum_name"].ToString() ?? string.Empty)
+            .GroupBy(r => Qualify(r["type_schema"], r["enum_name"]))
             .Select(g => new EnumTypeDefinition
             {
                 Name   = g.Key,
@@ -613,8 +646,8 @@ public class BulkSchemaFetcher
 
     private async Task<HashSet<string>> FetchMaterializedViewNamesAsync()
     {
-        const string sql = @"
-            SELECT c.relname
+        string sql = $@"
+            SELECT n.nspname AS view_schema, c.relname
             FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
             LEFT JOIN pg_depend ext
@@ -622,13 +655,12 @@ public class BulkSchemaFetcher
                AND ext.objid   = c.oid
                AND ext.deptype = 'e'
             WHERE c.relkind = 'm'
-              AND n.nspname = 'public'
+              AND {ExcludeSystemSchemas("n.nspname")}
               AND ext.objid IS NULL;";
 
         var dt = await _connection.ExecuteQueryAsync(sql);
         return dt.AsEnumerable()
-            .Select(r => r["relname"].ToString() ?? string.Empty)
-            .Where(n => !string.IsNullOrEmpty(n))
+            .Select(r => Qualify(r["view_schema"], r["relname"]))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 }

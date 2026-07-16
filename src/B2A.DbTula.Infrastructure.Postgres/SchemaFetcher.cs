@@ -1,14 +1,38 @@
-﻿using B2A.DbTula.Core.Enums;
+using B2A.DbTula.Core.Enums;
 using B2A.DbTula.Core.Models;
 using System.Data;
 
 namespace B2A.DbTula.Infrastructure.Postgres;
 
+/// <summary>
+/// Per-object (non-bulk) Postgres schema access. Scans every user schema (not just `public`) —
+/// system schemas (pg_catalog, information_schema, pg_toast, pg_temp_*, pg_toast_temp_*) are
+/// excluded. Object-enumeration methods return names schema-qualified as "schema.object"; the
+/// per-object lookup methods below accept that qualified form and split it back into schema/name
+/// to disambiguate (a bare name can collide across schemas, e.g. public.agent_cache vs agent.agent_cache).
+/// </summary>
 public class SchemaFetcher
 {
     private readonly DatabaseConnection _connection;
     private readonly Action<int, int, string, bool> _logger;
     private readonly LogLevel _logLevel;
+
+    // System schemas excluded from every scan so only user-created schemas are compared.
+    private const string SystemSchemaFilter =
+        "NOT IN ('pg_catalog', 'information_schema', 'pg_toast') " +
+        "AND {0} NOT LIKE 'pg_temp_%' AND {0} NOT LIKE 'pg_toast_temp_%'";
+
+    private static string ExcludeSystemSchemas(string column) =>
+        $"{column} {string.Format(SystemSchemaFilter, column)}";
+
+    /// <summary>Splits a "schema.name" qualified identifier back into its parts.</summary>
+    private static (string Schema, string Name) SplitQualified(string qualifiedName)
+    {
+        var idx = qualifiedName.IndexOf('.');
+        return idx < 0
+            ? ("public", qualifiedName)
+            : (qualifiedName[..idx], qualifiedName[(idx + 1)..]);
+    }
 
     public SchemaFetcher(DatabaseConnection connection, Action<int, int, string, bool> logger, object verbose, LogLevel logLevel = LogLevel.Basic)
     {
@@ -20,72 +44,76 @@ public class SchemaFetcher
     #region Get All Schema Objects Tables, Functions, Procedures, Sequences
     public async Task<DataTable> GetTablesAsync()
     {
-        string query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'";
+        string query = $@"
+            SELECT table_schema || '.' || table_name AS table_name
+            FROM information_schema.tables
+            WHERE {ExcludeSystemSchemas("table_schema")}
+              AND table_type = 'BASE TABLE'";
         return await ExecuteQueryAsync(query);
     }
 
     public async Task<DataTable> GetFunctionsAsync()
     {
-        var query = @"
-                        SELECT 
+        var query = $@"
+                        SELECT
                             p.oid,
-                            p.proname AS routine_name,
-                            pg_get_function_identity_arguments(p.oid) AS arguments, 
+                            n.nspname || '.' || p.proname AS routine_name,
+                            pg_get_function_identity_arguments(p.oid) AS arguments,
                             pg_get_functiondef(p.oid) AS definition
-                        FROM pg_proc p 
-                        JOIN pg_namespace n ON p.pronamespace = n.oid 
-                        WHERE n.nspname = 'public' 
+                        FROM pg_proc p
+                        JOIN pg_namespace n ON p.pronamespace = n.oid
+                        WHERE {ExcludeSystemSchemas("n.nspname")}
                           AND p.prokind = 'f';";
         return await ExecuteQueryAsync(query);
     }
 
     public async Task<DataTable> GetProceduresAsync()
     {
-        var query = @"
-                        SELECT 
+        var query = $@"
+                        SELECT
                             p.oid,
-                            p.proname AS routine_name,
+                            n.nspname || '.' || p.proname AS routine_name,
                             pg_get_function_identity_arguments(p.oid) AS arguments,
                            pg_get_functiondef(p.oid) AS definition
-                        FROM pg_proc p 
-                        JOIN pg_namespace n ON p.pronamespace = n.oid 
-                        WHERE n.nspname = 'public' 
+                        FROM pg_proc p
+                        JOIN pg_namespace n ON p.pronamespace = n.oid
+                        WHERE {ExcludeSystemSchemas("n.nspname")}
                           AND p.prokind = 'p';"; // 'p' indicates procedures
         return await ExecuteQueryAsync(query);
     }
 
     public async Task<DataTable> GetSequencesAsync()
     {
-        string query = @"
-                        SELECT sequence_name 
-                        FROM information_schema.sequences 
-                        WHERE sequence_schema = 'public';";
+        string query = $@"
+                        SELECT sequence_schema || '.' || sequence_name AS sequence_name
+                        FROM information_schema.sequences
+                        WHERE {ExcludeSystemSchemas("sequence_schema")};";
         return await ExecuteQueryAsync(query);
     }
 
     public async Task<DataTable> GetViewsAsync()
     {
-        var query = @"
-        SELECT 
-            table_name,
+        var query = $@"
+        SELECT
+            table_schema || '.' || table_name AS table_name,
             view_definition
         FROM information_schema.views
-        WHERE table_schema = 'public';";
+        WHERE {ExcludeSystemSchemas("table_schema")};";
         return await ExecuteQueryAsync(query);
     }
 
 
     public async Task<DataTable> GetTriggersAsync()
     {
-        var query = @"
-        SELECT 
+        var query = $@"
+        SELECT
             trg.tgname AS trigger_name,
-            tbl.relname AS table_name,
+            ns.nspname || '.' || tbl.relname AS table_name,
             pg_get_triggerdef(trg.oid, true) AS definition
         FROM pg_trigger trg
         JOIN pg_class tbl ON tbl.oid = trg.tgrelid
         JOIN pg_namespace ns ON ns.oid = tbl.relnamespace
-        WHERE ns.nspname = 'public'
+        WHERE {ExcludeSystemSchemas("ns.nspname")}
           AND NOT trg.tgisinternal;";
         return await ExecuteQueryAsync(query);
     }
@@ -118,6 +146,7 @@ public class SchemaFetcher
 
     public async Task<DataTable> GetColumnsAsync(string tableName)
     {
+        var (schema, table) = SplitQualified(tableName);
         const string query = @"
         SELECT
             column_name,
@@ -133,10 +162,10 @@ public class SchemaFetcher
             identity_generation
         FROM information_schema.columns
         WHERE table_name = @tableName
-          AND table_schema = 'public'
+          AND table_schema = @tableSchema
         ORDER BY ordinal_position";
 
-        var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
+        var parameters = new Dictionary<string, object> { { "@tableName", table }, { "@tableSchema", schema } };
         var result = await ExecuteQueryAsync(query, parameters);
 
         if (result.Columns.Contains("column_name"))
@@ -248,6 +277,7 @@ public class SchemaFetcher
 
     public async Task<DataTable> GetIndexesAsync(string tableName)
     {
+        var (schema, table) = SplitQualified(tableName);
         const string query = @"
             SELECT
                 i.relname AS indexname,
@@ -265,29 +295,36 @@ public class SchemaFetcher
             CROSS JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY AS cols(attnum, ord)
             JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = cols.attnum
             WHERE t.relname = @tableName
-              AND ns.nspname = 'public'
+              AND ns.nspname = @tableSchema
               AND ix.indisvalid = true
               AND ix.indisprimary = false
               AND a.attnum > 0
             ORDER BY i.relname, cols.ord;";
 
-        var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
+        var parameters = new Dictionary<string, object> { { "@tableName", table }, { "@tableSchema", schema } };
         return await ExecuteQueryAsync(query, parameters);
     }
 
-    public async Task<string?> GetIndexCreateScriptAsync(string indexName)
+    public async Task<string?> GetIndexCreateScriptAsync(string tableName, string indexName)
     {
+        var (schema, table) = SplitQualified(tableName);
         const string sql = @"
-        SELECT pg_get_indexdef(indexrelid) AS create_script
+        SELECT pg_get_indexdef(idx.indexrelid) AS create_script
         FROM pg_index idx
         JOIN pg_class cls ON cls.oid = idx.indexrelid
+        JOIN pg_class tbl ON tbl.oid = idx.indrelid
+        JOIN pg_namespace ns ON ns.oid = tbl.relnamespace
         WHERE cls.relname = @indexName
+          AND tbl.relname = @tableName
+          AND ns.nspname = @tableSchema
         LIMIT 1;";
 
         var parameters = new Dictionary<string, object>
-    {
-        { "@indexName", indexName }
-    };
+        {
+            { "@indexName", indexName },
+            { "@tableName", table },
+            { "@tableSchema", schema }
+        };
 
         var result = await ExecuteQueryAsync(sql, parameters);
 
@@ -298,27 +335,29 @@ public class SchemaFetcher
 
     public async Task<DataTable> GetPrimaryKeysAsync(string tableName)
     {
+        var (schema, table) = SplitQualified(tableName);
         string query = @"
-                    SELECT 
+                    SELECT
                         tc.constraint_name,
                         kcu.column_name
-                    FROM 
+                    FROM
                         information_schema.table_constraints tc
-                    JOIN 
-                        information_schema.key_column_usage kcu 
+                    JOIN
+                        information_schema.key_column_usage kcu
                         ON tc.constraint_name = kcu.constraint_name
                         AND tc.table_schema = kcu.table_schema
                         AND tc.table_name = kcu.table_name
-                    WHERE 
+                    WHERE
                         tc.table_name = @tableName
                         AND tc.constraint_type = 'PRIMARY KEY'
-                        AND tc.table_schema = 'public'
-                    ORDER BY 
+                        AND tc.table_schema = @tableSchema
+                    ORDER BY
                         kcu.ordinal_position;";
 
         var parameters = new Dictionary<string, object>
                 {
-                    { "@tableName", tableName }
+                    { "@tableName", table },
+                    { "@tableSchema", schema }
                 };
 
         return await ExecuteQueryAsync(query, parameters);
@@ -326,21 +365,24 @@ public class SchemaFetcher
 
     public async Task<string?> GetPrimaryKeyCreateScriptAsync(string tableName)
     {
+        var (schema, table) = SplitQualified(tableName);
         const string sql = @"
         SELECT
-            'ALTER TABLE ""' || rel.relname || '"" ADD CONSTRAINT ""' || con.conname || '"" ' || 
+            'ALTER TABLE ""' || ns.nspname || '"".""' || rel.relname || '"" ADD CONSTRAINT ""' || con.conname || '"" ' ||
             pg_get_constraintdef(con.oid, true) || ';' AS create_script
         FROM pg_constraint con
         JOIN pg_class rel ON rel.oid = con.conrelid
+        JOIN pg_namespace ns ON ns.oid = rel.relnamespace
         WHERE con.contype = 'p'
           AND rel.relname = @tableName
-          AND rel.relnamespace = 'public'::regnamespace
+          AND ns.nspname = @tableSchema
         LIMIT 1;";
 
         var parameters = new Dictionary<string, object>
-    {
-        { "@tableName", tableName }
-    };
+        {
+            { "@tableName", table },
+            { "@tableSchema", schema }
+        };
 
         var result = await ExecuteQueryAsync(sql, parameters);
         return result.Rows.Count > 0
@@ -350,11 +392,12 @@ public class SchemaFetcher
 
     public async Task<DataTable> GetForeignKeysAsync(string tableName)
     {
+        var (schema, table) = SplitQualified(tableName);
         const string query = @"
             SELECT
                 con.conname AS foreign_key_name,
                 src_att.attname AS column_name,
-                ref_rel.relname AS foreign_table_name,
+                ref_ns.nspname || '.' || ref_rel.relname AS foreign_table_name,
                 ref_att.attname AS foreign_column_name,
                 CASE con.confupdtype
                     WHEN 'a' THEN 'NO ACTION'  WHEN 'r' THEN 'RESTRICT'
@@ -368,38 +411,42 @@ public class SchemaFetcher
             JOIN pg_class rel ON rel.oid = con.conrelid
             JOIN pg_namespace ns ON ns.oid = rel.relnamespace
             JOIN pg_class ref_rel ON ref_rel.oid = con.confrelid
+            JOIN pg_namespace ref_ns ON ref_ns.oid = ref_rel.relnamespace
             JOIN LATERAL unnest(con.conkey)  WITH ORDINALITY AS src(attnum, ord) ON true
             JOIN LATERAL unnest(con.confkey) WITH ORDINALITY AS ref(attnum, ord) ON ref.ord = src.ord
             JOIN pg_attribute src_att ON src_att.attrelid = con.conrelid  AND src_att.attnum = src.attnum
             JOIN pg_attribute ref_att ON ref_att.attrelid = con.confrelid AND ref_att.attnum = ref.attnum
             WHERE con.contype = 'f'
               AND rel.relname = @tableName
-              AND ns.nspname = 'public'
+              AND ns.nspname = @tableSchema
             ORDER BY con.conname, src.ord;";
 
-        var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
+        var parameters = new Dictionary<string, object> { { "@tableName", table }, { "@tableSchema", schema } };
         return await ExecuteQueryAsync(query, parameters);
     }
 
     public async Task<string?> GetForeignKeyCreateScriptAsync(string tableName, string foreignKeyName)
     {
+        var (schema, table) = SplitQualified(tableName);
         const string sql = @"
     SELECT
-        'ALTER TABLE ""' || rel.relname || '"" ADD CONSTRAINT ""' || con.conname || '"" ' ||
+        'ALTER TABLE ""' || ns.nspname || '"".""' || rel.relname || '"" ADD CONSTRAINT ""' || con.conname || '"" ' ||
         pg_get_constraintdef(con.oid, true) || ';' AS create_script
     FROM pg_constraint con
     JOIN pg_class rel ON rel.oid = con.conrelid
+    JOIN pg_namespace ns ON ns.oid = rel.relnamespace
     WHERE con.contype = 'f'  -- 'f' means foreign key
       AND rel.relname = @tableName
       AND con.conname = @foreignKeyName
-      AND rel.relnamespace = 'public'::regnamespace
+      AND ns.nspname = @tableSchema
     LIMIT 1;";
 
         var parameters = new Dictionary<string, object>
-    {
-        { "@tableName", tableName },
-        { "@foreignKeyName", foreignKeyName }
-    };
+        {
+            { "@tableName", table },
+            { "@foreignKeyName", foreignKeyName },
+            { "@tableSchema", schema }
+        };
 
         var result = await ExecuteQueryAsync(sql, parameters);
         return result.Rows.Count > 0
@@ -410,6 +457,7 @@ public class SchemaFetcher
 
     public async Task<List<UniqueConstraintDefinition>> GetUniqueConstraintsListAsync(string tableName)
     {
+        var (schema, table) = SplitQualified(tableName);
         const string sql = @"
             SELECT
                 con.conname AS constraint_name,
@@ -419,11 +467,11 @@ public class SchemaFetcher
             JOIN pg_namespace ns ON ns.oid = rel.relnamespace
             JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
             WHERE con.contype = 'u'
-              AND ns.nspname = 'public'
+              AND ns.nspname = @tableSchema
               AND rel.relname = @tableName
             ORDER BY con.conname, att.attnum;";
 
-        var parameters = new Dictionary<string, object> { { "@tableName", tableName } };
+        var parameters = new Dictionary<string, object> { { "@tableName", table }, { "@tableSchema", schema } };
         var dataTable = await ExecuteQueryAsync(sql, parameters);
 
         return dataTable.AsEnumerable()
@@ -441,21 +489,24 @@ public class SchemaFetcher
 
     public async Task<string?> GetUniqueConstraintCreateScriptAsync(string tableName, string constraintName)
     {
+        var (schema, table) = SplitQualified(tableName);
         const string sql = @"
-            SELECT 'ALTER TABLE ""' || rel.relname || '"" ADD CONSTRAINT ""' || con.conname || '"" ' ||
+            SELECT 'ALTER TABLE ""' || ns.nspname || '"".""' || rel.relname || '"" ADD CONSTRAINT ""' || con.conname || '"" ' ||
                    pg_get_constraintdef(con.oid, true) || ';' AS create_script
             FROM pg_constraint con
             JOIN pg_class rel ON rel.oid = con.conrelid
+            JOIN pg_namespace ns ON ns.oid = rel.relnamespace
             WHERE con.contype = 'u'
               AND rel.relname = @tableName
               AND con.conname = @constraintName
-              AND rel.relnamespace = 'public'::regnamespace
+              AND ns.nspname = @tableSchema
             LIMIT 1;";
 
         var parameters = new Dictionary<string, object>
         {
-            { "@tableName", tableName },
-            { "@constraintName", constraintName }
+            { "@tableName", table },
+            { "@constraintName", constraintName },
+            { "@tableSchema", schema }
         };
 
         var result = await ExecuteQueryAsync(sql, parameters);
@@ -464,12 +515,12 @@ public class SchemaFetcher
 
     public async Task<HashSet<string>> GetMaterializedViewNamesAsync()
     {
-        const string sql = @"
-            SELECT relname
+        string sql = $@"
+            SELECT n.nspname || '.' || relname AS relname
             FROM pg_class
             JOIN pg_namespace n ON n.oid = relnamespace
             WHERE relkind = 'm'
-              AND n.nspname = 'public';";
+              AND {ExcludeSystemSchemas("n.nspname")};";
 
         var dataTable = await ExecuteQueryAsync(sql);
         return dataTable.AsEnumerable()
@@ -480,11 +531,11 @@ public class SchemaFetcher
 
     public async Task<IList<string>> GetSequenceNamesAsync()
     {
-        const string sql = @"
-            SELECT sequence_name
+        string sql = $@"
+            SELECT sequence_schema || '.' || sequence_name AS sequence_name
             FROM information_schema.sequences
-            WHERE sequence_schema = 'public'
-            ORDER BY sequence_name;";
+            WHERE {ExcludeSystemSchemas("sequence_schema")}
+            ORDER BY sequence_schema, sequence_name;";
 
         var dataTable = await ExecuteQueryAsync(sql);
         return dataTable.AsEnumerable()
@@ -497,6 +548,7 @@ public class SchemaFetcher
 
     public async Task<string?> GetFunctionDefinitionAsync(string functionName, string? arguments = null)
     {
+        var (schema, name) = SplitQualified(functionName);
         string query;
         Dictionary<string, object> parameters;
 
@@ -507,10 +559,10 @@ public class SchemaFetcher
                 FROM pg_proc p
                 JOIN pg_namespace n ON p.pronamespace = n.oid
                 WHERE p.proname = @name
-                  AND n.nspname = 'public'
+                  AND n.nspname = @schema
                   AND pg_get_function_identity_arguments(p.oid) = @arguments
                 LIMIT 1;";
-            parameters = new Dictionary<string, object> { { "name", functionName }, { "arguments", arguments } };
+            parameters = new Dictionary<string, object> { { "name", name }, { "schema", schema }, { "arguments", arguments } };
         }
         else
         {
@@ -518,9 +570,9 @@ public class SchemaFetcher
                 SELECT pg_get_functiondef(p.oid) AS definition
                 FROM pg_proc p
                 JOIN pg_namespace n ON p.pronamespace = n.oid
-                WHERE p.proname = @name AND n.nspname = 'public'
+                WHERE p.proname = @name AND n.nspname = @schema
                 LIMIT 1;";
-            parameters = new Dictionary<string, object> { { "name", functionName } };
+            parameters = new Dictionary<string, object> { { "name", name }, { "schema", schema } };
         }
 
         var result = await ExecuteQueryAsync(query, parameters);
@@ -535,14 +587,16 @@ public class SchemaFetcher
     #region Get Indexe and Sequence Definitions
     public async Task<string> GetIndexDefinitionAsync(string indexName)
     {
+        var (schema, name) = SplitQualified(indexName);
         var query = @"
-                        SELECT indexdef 
-                        FROM pg_indexes 
-                        WHERE indexname = @indexName AND schemaname = 'public';";
+                        SELECT indexdef
+                        FROM pg_indexes
+                        WHERE indexname = @indexName AND schemaname = @schema;";
 
         var parameters = new Dictionary<string, object>
             {
-                { "@indexName", indexName }
+                { "@indexName", name },
+                { "@schema", schema }
             };
 
         var result = await ExecuteQueryAsync(query, parameters);
@@ -551,8 +605,9 @@ public class SchemaFetcher
 
     public async Task<string> GetSequenceDefinitionAsync(string sequenceName)
     {
+        var (schema, name) = SplitQualified(sequenceName);
         var query = @"
-                        SELECT 'CREATE SEQUENCE ' || quote_ident(sequencename) ||
+                        SELECT 'CREATE SEQUENCE ' || quote_ident(schemaname) || '.' || quote_ident(sequencename) ||
                                ' START WITH ' || start_value ||
                                ' INCREMENT BY ' || increment_by ||
                                ' MINVALUE ' || min_value ||
@@ -560,12 +615,13 @@ public class SchemaFetcher
                                ' CACHE ' || cache_size ||
                                CASE WHEN cycle THEN ' CYCLE' ELSE '' END AS definition
                         FROM pg_sequences
-                        WHERE schemaname = 'public' AND sequencename = @name;
+                        WHERE schemaname = @schema AND sequencename = @name;
                     ";
 
         var parameters = new Dictionary<string, object>
                 {
-                    { "@name", sequenceName }
+                    { "@name", name },
+                    { "@schema", schema }
                 };
 
         var result = await ExecuteQueryAsync(query, parameters);
@@ -603,18 +659,20 @@ public class SchemaFetcher
 
     internal async Task<string?> GetViewDefinitionAsync(string viewName)
     {
+        var (schema, name) = SplitQualified(viewName);
         const string sql = @"
         SELECT pg_get_viewdef(c.oid, true)
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE c.relkind = 'v'
-          AND n.nspname = 'public'
+          AND n.nspname = @schema
           AND c.relname = @viewName
         LIMIT 1;";
 
         var parameters = new Dictionary<string, object>
     {
-        { "viewName", viewName }
+        { "viewName", name },
+        { "schema", schema }
     };
 
         var result = await _connection.ExecuteQueryAsync(sql, parameters);
@@ -627,13 +685,17 @@ public class SchemaFetcher
 
     internal async Task<string?> GetTriggerDefinitionAsync(string triggerName)
     {
-        const string sql = @"
+        // No table context is available here (trigger names are only unique per-table, not
+        // per-schema), so this scans all user schemas and returns the first match. Callers that
+        // need to disambiguate across schemas should prefer the snapshot-based Trigger.Definition
+        // (keyed by table+name) instead of this method.
+        string sql = $@"
         SELECT pg_get_triggerdef(t.oid, true)
         FROM pg_trigger t
         JOIN pg_class c ON c.oid = t.tgrelid
         JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE t.tgname = @triggerName
-          AND n.nspname = 'public'
+          AND {ExcludeSystemSchemas("n.nspname")}
         LIMIT 1;";
 
         var parameters = new Dictionary<string, object>

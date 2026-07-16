@@ -318,7 +318,7 @@ public class SchemaComparer : ISchemaComparer
                 }
                 foreach (var idx in source.Indexes)
                 {
-                    var idxScript = await sourceProvider.GetIndexCreateScriptAsync(idx.Name);
+                    var idxScript = await sourceProvider.GetIndexCreateScriptAsync(source.Name, idx.Name);
                     if (!string.IsNullOrWhiteSpace(idxScript))
                         subs.Add(new("Indexes", ComparisonStatus.MissingInTarget, $"Index '{idx.Name}' missing in target", idxScript));
                 }
@@ -453,7 +453,7 @@ public class SchemaComparer : ISchemaComparer
             {
                 status = ComparisonStatus.Mismatch;
                 subResults.Add(new("Columns", ComparisonStatus.MissingInTarget, $"Column '{col.Name}' is missing in target.",
-                    $"ALTER TABLE \"{source.Name}\" ADD COLUMN {RenderColumnDefinition(col)};"));
+                    $"ALTER TABLE {SqlIdentifier.Quote(source.Name)} ADD COLUMN {RenderColumnDefinition(col)};"));
             }
             else
             {
@@ -513,18 +513,18 @@ public class SchemaComparer : ISchemaComparer
 
         foreach (var pk in table.PrimaryKeys.Where(p => p.Columns.Count > 0))
         {
-            var name = string.IsNullOrWhiteSpace(pk.Name) ? $"pk_{table.Name}" : pk.Name;
+            var name = string.IsNullOrWhiteSpace(pk.Name) ? $"pk_{table.Name.Replace('.', '_')}" : pk.Name;
             lines.Add($"CONSTRAINT \"{name}\" PRIMARY KEY ({string.Join(", ", pk.Columns.Select(c => $"\"{c}\""))})");
         }
 
         foreach (var uc in table.UniqueConstraints.Where(u => u.Columns.Count > 0))
         {
-            var name = string.IsNullOrWhiteSpace(uc.Name) ? $"uq_{table.Name}" : uc.Name;
+            var name = string.IsNullOrWhiteSpace(uc.Name) ? $"uq_{table.Name.Replace('.', '_')}" : uc.Name;
             lines.Add($"CONSTRAINT \"{name}\" UNIQUE ({string.Join(", ", uc.Columns.Select(c => $"\"{c}\""))})");
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"CREATE TABLE IF NOT EXISTS \"{table.Name}\" (");
+        sb.AppendLine($"CREATE TABLE IF NOT EXISTS {SqlIdentifier.Quote(table.Name)} (");
         for (int i = 0; i < lines.Count; i++)
             sb.AppendLine($"    {lines[i]}{(i < lines.Count - 1 ? "," : "")}");
         sb.Append(");");
@@ -564,7 +564,7 @@ public class SchemaComparer : ISchemaComparer
     internal static string BuildColumnAlterStatements(string table, ColumnDefinition src, ColumnDefinition tgt)
     {
         var stmts = new List<string>();
-        var t = $"\"{table}\"";
+        var t = SqlIdentifier.Quote(table);
         var c = $"\"{src.Name}\"";
 
         // Type/size change — RISKY (data must be castable).
@@ -737,7 +737,7 @@ public class SchemaComparer : ISchemaComparer
                 // Already structurally equal by grouping key, but verify
                 if (!sourceIndex!.StructuralEquals(targetIndex!))
                 {
-                    var script = await sourceProvider.GetIndexCreateScriptAsync(sourceIndex.Name);
+                    var script = await sourceProvider.GetIndexCreateScriptAsync(source.Name, sourceIndex.Name);
                     subResults.Add(new("Indexes", ComparisonStatus.Mismatch,
                         $"Index structure '{structuralKey}' has subtle differences", script ?? ""));
                     status = ComparisonStatus.Mismatch;
@@ -745,14 +745,14 @@ public class SchemaComparer : ISchemaComparer
             }
             else if (inSource && !inTarget)
             {
-                var script = await sourceProvider.GetIndexCreateScriptAsync(sourceIndex!.Name);
+                var script = await sourceProvider.GetIndexCreateScriptAsync(source.Name, sourceIndex!.Name);
                 subResults.Add(new("Indexes", ComparisonStatus.MissingInTarget,
                     $"Index '{structuralKey}' is missing in target.", script ?? ""));
                 status = ComparisonStatus.Mismatch;
             }
             else if (!inSource && inTarget)
             {
-                var script = await targetProvider.GetIndexCreateScriptAsync(targetIndex!.Name);
+                var script = await targetProvider.GetIndexCreateScriptAsync(target.Name, targetIndex!.Name);
                 subResults.Add(new("Indexes", ComparisonStatus.MissingInSource,
                     $"Index '{structuralKey}' exists in target but not in source.",
                     $"-- Optionally drop: DROP INDEX IF EXISTS \"{targetIndex.Name}\";"));
@@ -835,7 +835,7 @@ public class SchemaComparer : ISchemaComparer
             {
                 subResults.Add(new("CheckConstraints", ComparisonStatus.MissingInTarget,
                     $"Check constraint ({srcCheck!.Name}): {key} missing in target",
-                    $"ALTER TABLE \"{sourceTableName}\" ADD CONSTRAINT \"{srcCheck.Name}\" {srcCheck.CheckClause};"));
+                    $"ALTER TABLE {SqlIdentifier.Quote(sourceTableName)} ADD CONSTRAINT \"{srcCheck.Name}\" {srcCheck.CheckClause};"));
                 status = ComparisonStatus.Mismatch;
             }
             else if (!inSrc && inTgt)
@@ -1025,7 +1025,7 @@ public class SchemaComparer : ISchemaComparer
         {
             subResults.Add(new("Columns", ComparisonStatus.MissingInSource,
                 $"Column '{col.Name}' is missing in source",
-                $"ALTER TABLE \"{table.Name}\" ADD COLUMN {RenderColumnDefinition(col)};"));
+                $"ALTER TABLE {SqlIdentifier.Quote(table.Name)} ADD COLUMN {RenderColumnDefinition(col)};"));
         }
 
         foreach (var fk in table.ForeignKeys)
@@ -1036,7 +1036,7 @@ public class SchemaComparer : ISchemaComparer
 
         foreach (var idx in table.Indexes)
         {
-            var idxScript = await provider.GetIndexCreateScriptAsync(idx.Name);
+            var idxScript = await provider.GetIndexCreateScriptAsync(table.Name, idx.Name);
             subResults.Add(new("Indexes", ComparisonStatus.MissingInSource, $"Index '{idx.Name}' is missing in source", idxScript));
         }
 

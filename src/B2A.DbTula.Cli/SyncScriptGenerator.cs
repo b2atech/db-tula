@@ -208,12 +208,12 @@ public class SyncScriptGenerator
         {
             foreach (var r in results.Where(r => r.ObjectType == SchemaObjectType.Table && r.Status == ComparisonStatus.MissingInSource))
                 script.Destructive.Add(Stmt("DropTable", r.Name,
-                    $"DROP TABLE IF EXISTS \"{r.Name}\";", "Table exists in target but not source"));
+                    $"DROP TABLE IF EXISTS {SqlIdentifier.Quote(r.Name)};", "Table exists in target but not source"));
 
             foreach (var r in Mismatched(results, SchemaObjectType.Table))
                 foreach (var sub in r.SubResults.Where(s => s.Component == "Columns" && s.Status == ComparisonStatus.MissingInSource))
                     script.Destructive.Add(Stmt("DropColumn", r.Name,
-                        $"-- Extract column name from: {sub.Details}\n-- ALTER TABLE \"{r.Name}\" DROP COLUMN IF EXISTS \"...\";",
+                        $"-- Extract column name from: {sub.Details}\n-- ALTER TABLE {SqlIdentifier.Quote(r.Name)} DROP COLUMN IF EXISTS \"...\";",
                         sub.Details ?? "Column exists in target but not source"));
         }
 
@@ -257,10 +257,10 @@ public class SyncScriptGenerator
         var sb = new StringBuilder();
         sb.AppendLine($"-- ⚠ Enum '{enumName}' changed — using rename-trick to avoid DROP failures");
         sb.AppendLine($"-- Step 1: Rename old enum so the name is free");
-        sb.AppendLine($"ALTER TYPE \"{enumName}\" RENAME TO \"{oldName}\";");
+        sb.AppendLine($"ALTER TYPE {SqlIdentifier.Quote(enumName)} RENAME TO {SqlIdentifier.Quote(oldName)};");
         sb.AppendLine();
         sb.AppendLine($"-- Step 2: Create new enum with updated values");
-        sb.AppendLine($"CREATE TYPE \"{enumName}\" AS ENUM ({newValues});");
+        sb.AppendLine($"CREATE TYPE {SqlIdentifier.Quote(enumName)} AS ENUM ({newValues});");
         sb.AppendLine();
 
         if (affectedColumns.Any())
@@ -268,21 +268,22 @@ public class SyncScriptGenerator
             sb.AppendLine("-- Step 3: Recast all columns that use this enum type");
             foreach (var (table, column, defaultValue) in affectedColumns)
             {
+                var t = SqlIdentifier.Quote(table);
                 if (!string.IsNullOrWhiteSpace(defaultValue))
-                    sb.AppendLine($"ALTER TABLE \"{table}\" ALTER COLUMN \"{column}\" DROP DEFAULT;");
+                    sb.AppendLine($"ALTER TABLE {t} ALTER COLUMN \"{column}\" DROP DEFAULT;");
 
-                sb.AppendLine($"ALTER TABLE \"{table}\" ALTER COLUMN \"{column}\" TYPE \"{enumName}\"");
-                sb.AppendLine($"    USING \"{column}\"::text::\"{enumName}\";");
+                sb.AppendLine($"ALTER TABLE {t} ALTER COLUMN \"{column}\" TYPE {SqlIdentifier.Quote(enumName)}");
+                sb.AppendLine($"    USING \"{column}\"::text::{SqlIdentifier.Quote(enumName)};");
 
                 if (!string.IsNullOrWhiteSpace(defaultValue))
-                    sb.AppendLine($"ALTER TABLE \"{table}\" ALTER COLUMN \"{column}\" SET DEFAULT {defaultValue};");
+                    sb.AppendLine($"ALTER TABLE {t} ALTER COLUMN \"{column}\" SET DEFAULT {defaultValue};");
 
                 sb.AppendLine();
             }
         }
 
         sb.AppendLine($"-- Step 4: Drop the old renamed enum");
-        sb.AppendLine($"DROP TYPE \"{oldName}\";");
+        sb.AppendLine($"DROP TYPE {SqlIdentifier.Quote(oldName)};");
 
         return sb.ToString().Trim();
     }
@@ -449,7 +450,7 @@ public class SyncScriptGenerator
         var cols = r.SubResults
             .Where(s => s.Component == "Columns" && !string.IsNullOrWhiteSpace(s.CreateScript))
             .Select(s => s.CreateScript!
-                .Replace($"ALTER TABLE \"{r.Name}\" ADD COLUMN ", "")
+                .Replace($"ALTER TABLE {SqlIdentifier.Quote(r.Name)} ADD COLUMN ", "")
                 .TrimEnd(';').Trim())
             .ToList();
 
@@ -457,7 +458,7 @@ public class SyncScriptGenerator
 
         var sb = new StringBuilder();
         sb.AppendLine($"-- ⚠ Simplified CREATE — review before executing");
-        sb.AppendLine($"CREATE TABLE IF NOT EXISTS \"{r.Name}\" (");
+        sb.AppendLine($"CREATE TABLE IF NOT EXISTS {SqlIdentifier.Quote(r.Name)} (");
         for (int i = 0; i < cols.Count; i++)
         {
             sb.Append($"    {cols[i]}");

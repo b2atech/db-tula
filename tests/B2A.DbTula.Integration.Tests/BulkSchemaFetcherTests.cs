@@ -74,6 +74,14 @@ public class BulkSchemaFetcherTests : IAsyncLifetime
             RETURNS numeric LANGUAGE sql AS $$
                 SELECT SUM(t.amount) FROM invoices t WHERE t.customer_id = p_customer_id;
             $$;
+
+            -- Same-named table in a second schema, to prove cross-schema scans don't collide
+            -- (this mirrors a real case: public.agent_cache and agent.agent_cache in one database).
+            CREATE SCHEMA agent;
+            CREATE TABLE agent.customers (
+                id      integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                nickname text NOT NULL
+            );
         ");
     }
 
@@ -81,15 +89,33 @@ public class BulkSchemaFetcherTests : IAsyncLifetime
     public async Task Snapshot_ContainsBothTables()
     {
         var snap = await _fetcher.TakeSnapshotAsync();
-        Assert.Contains("customers", snap.TableNames);
-        Assert.Contains("invoices",  snap.TableNames);
+        Assert.Contains("public.customers", snap.TableNames);
+        Assert.Contains("public.invoices",  snap.TableNames);
+    }
+
+    [Fact]
+    public async Task Snapshot_ScansNonPublicSchemas_WithoutCrossAttributingColumns()
+    {
+        var snap = await _fetcher.TakeSnapshotAsync();
+
+        Assert.Contains("agent.customers", snap.TableNames);
+        Assert.Contains("public.customers", snap.TableNames);
+
+        var publicColumns = snap.ColumnsByTable["public.customers"].Select(c => c.Name).ToList();
+        var agentColumns  = snap.ColumnsByTable["agent.customers"].Select(c => c.Name).ToList();
+
+        Assert.Contains("email", publicColumns);
+        Assert.DoesNotContain("nickname", publicColumns);
+
+        Assert.Contains("nickname", agentColumns);
+        Assert.DoesNotContain("email", agentColumns);
     }
 
     [Fact]
     public async Task Columns_NumericPrecisionAndScaleFetched()
     {
         var snap = await _fetcher.TakeSnapshotAsync();
-        var amount = snap.ColumnsByTable["invoices"].First(c => c.Name == "amount");
+        var amount = snap.ColumnsByTable["public.invoices"].First(c => c.Name == "amount");
 
         Assert.Equal(18, amount.NumericPrecision);
         Assert.Equal(4,  amount.NumericScale);
@@ -99,7 +125,7 @@ public class BulkSchemaFetcherTests : IAsyncLifetime
     public async Task Columns_IsIdentityDetected()
     {
         var snap = await _fetcher.TakeSnapshotAsync();
-        var id = snap.ColumnsByTable["invoices"].First(c => c.Name == "id");
+        var id = snap.ColumnsByTable["public.invoices"].First(c => c.Name == "id");
 
         Assert.True(id.IsIdentity);
     }
@@ -108,7 +134,7 @@ public class BulkSchemaFetcherTests : IAsyncLifetime
     public async Task Indexes_ColumnOrderPreserved()
     {
         var snap = await _fetcher.TakeSnapshotAsync();
-        var idx = snap.IndexesByTable["invoices"].First(i => i.Name == "idx_invoices_status_due");
+        var idx = snap.IndexesByTable["public.invoices"].First(i => i.Name == "idx_invoices_status_due");
 
         Assert.Equal(new[] { "status", "due_date" }, idx.Columns);
     }
@@ -117,18 +143,18 @@ public class BulkSchemaFetcherTests : IAsyncLifetime
     public async Task ForeignKeys_CascadeActionsFetched()
     {
         var snap = await _fetcher.TakeSnapshotAsync();
-        var fk = snap.ForeignKeysByTable["invoices"].First();
+        var fk = snap.ForeignKeysByTable["public.invoices"].First();
 
         Assert.Equal("CASCADE",   fk.OnDelete);
         Assert.Equal("NO ACTION", fk.OnUpdate);
-        Assert.Equal("customers", fk.ReferencedTable);
+        Assert.Equal("public.customers", fk.ReferencedTable);
     }
 
     [Fact]
     public async Task CheckConstraints_Fetched()
     {
         var snap = await _fetcher.TakeSnapshotAsync();
-        var checks = snap.CheckConstraintsByTable["invoices"];
+        var checks = snap.CheckConstraintsByTable["public.invoices"];
 
         Assert.Contains(checks, c => c.Name == "chk_amount_positive");
     }
@@ -138,16 +164,16 @@ public class BulkSchemaFetcherTests : IAsyncLifetime
     {
         var snap = await _fetcher.TakeSnapshotAsync();
 
-        Assert.Contains("mv_customer_totals", snap.MaterializedViewNames);
+        Assert.Contains("public.mv_customer_totals", snap.MaterializedViewNames);
         // mv_customer_totals is NOT in TableNames (not a base table)
-        Assert.DoesNotContain("mv_customer_totals", snap.TableNames);
+        Assert.DoesNotContain("public.mv_customer_totals", snap.TableNames);
     }
 
     [Fact]
     public async Task Enums_ValueOrderPreserved()
     {
         var snap = await _fetcher.TakeSnapshotAsync();
-        var status = snap.Enums.First(e => e.Name == "invoice_status");
+        var status = snap.Enums.First(e => e.Name == "public.invoice_status");
 
         Assert.Equal(new[] { "draft", "sent", "paid", "cancelled" }, status.Values);
     }
@@ -156,7 +182,7 @@ public class BulkSchemaFetcherTests : IAsyncLifetime
     public async Task Sequences_DefinitionFetched()
     {
         var snap = await _fetcher.TakeSnapshotAsync();
-        var seq = snap.Sequences.First(s => s.Name == "payment_seq");
+        var seq = snap.Sequences.First(s => s.Name == "public.payment_seq");
 
         Assert.Equal(5,    seq.IncrementBy);
         Assert.Equal(1000, seq.MinValue);
@@ -167,7 +193,7 @@ public class BulkSchemaFetcherTests : IAsyncLifetime
     public async Task Functions_FetchedWithDefinition()
     {
         var snap = await _fetcher.TakeSnapshotAsync();
-        var fn = snap.Functions.FirstOrDefault(f => f.Name == "get_invoice_total");
+        var fn = snap.Functions.FirstOrDefault(f => f.Name == "public.get_invoice_total");
 
         Assert.NotNull(fn);
         Assert.Contains("customer_id", fn.Definition);
@@ -177,7 +203,7 @@ public class BulkSchemaFetcherTests : IAsyncLifetime
     public async Task UniqueConstraints_Fetched()
     {
         var snap = await _fetcher.TakeSnapshotAsync();
-        var uqs = snap.UniqueConstraintsByTable["customers"];
+        var uqs = snap.UniqueConstraintsByTable["public.customers"];
 
         Assert.Contains(uqs, u => u.Name == "uq_customers_email");
     }

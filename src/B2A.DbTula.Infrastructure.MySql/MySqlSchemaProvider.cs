@@ -79,7 +79,7 @@ namespace B2A.DbTula.Infrastructure.MySql
             return await _fetcher.GetIndexesListAsync(tableName);
         }
 
-        public async Task<string?> GetIndexCreateScriptAsync(string indexName)
+        public async Task<string?> GetIndexCreateScriptAsync(string tableName, string indexName)
         {
             return await _fetcher.GetIndexDefinitionAsync(indexName);
         }

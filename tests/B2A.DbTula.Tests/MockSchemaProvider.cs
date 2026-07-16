@@ -83,7 +83,7 @@ public class MockSchemaProvider : IDatabaseSchemaProvider
 
     public Task<string?> GetPrimaryKeyCreateScriptAsync(string tableName) => Task.FromResult<string?>(null);
     public Task<string?> GetForeignKeyCreateScriptAsync(string tableName, string foreignKeyName) => Task.FromResult<string?>(null);
-    public Task<string?> GetIndexCreateScriptAsync(string indexName) => Task.FromResult<string?>(null);
+    public Task<string?> GetIndexCreateScriptAsync(string tableName, string indexName) => Task.FromResult<string?>(null);
 
     public Task<IList<DbViewDefinition>> GetViewsAsync() => Task.FromResult<IList<DbViewDefinition>>(Views);
 
