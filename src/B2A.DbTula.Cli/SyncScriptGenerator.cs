@@ -156,7 +156,11 @@ public class SyncScriptGenerator
                     if (r.Status == ComparisonStatus.Mismatch)
                     {
                         var kind = r.ObjectType == SchemaObjectType.Procedure ? "PROCEDURE" : "FUNCTION";
-                        funcSb.AppendLine($"DROP {kind} IF EXISTS {r.Name};");
+                        // Bare "DROP FUNCTION IF EXISTS name;" is ambiguous — and errors —
+                        // when the name is overloaded. Parse the (IN/OUT/…) signature out of
+                        // the CREATE statement itself so the DROP targets the exact overload.
+                        var signature = ExtractDropSignature(body, kind) ?? r.Name;
+                        funcSb.AppendLine($"DROP {kind} IF EXISTS {signature};");
                     }
 
                     // pg_get_functiondef emits no trailing ';'. Without it the next
@@ -436,6 +440,103 @@ public class SyncScriptGenerator
 
     private static SyncStatement Stmt(string type, string name, string sql, string comment) =>
         new(type, name, sql, comment);
+
+    // Parses "CREATE OR REPLACE FUNCTION/PROCEDURE name(IN a int, OUT b text, c int DEFAULT 1)"
+    // down to a DROP-compatible signature "name(int, int)" — argnames, defaults, and
+    // OUT-only parameters are dropped since they aren't part of the overload signature
+    // Postgres uses to resolve DROP FUNCTION/PROCEDURE.
+    private static string? ExtractDropSignature(string createStatement, string kind)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            createStatement, $@"(?i)\b{kind}\s+([\w""\.]+)\s*\(");
+        if (!match.Success) return null;
+
+        int start = match.Index + match.Length;
+        int depth = 1, i = start;
+        while (i < createStatement.Length && depth > 0)
+        {
+            if (createStatement[i] == '(') depth++;
+            else if (createStatement[i] == ')') depth--;
+            i++;
+        }
+        if (depth != 0) return null;
+
+        var name = match.Groups[1].Value;
+        var argsText = createStatement.Substring(start, i - start - 1);
+
+        var paramTypes = new List<string>();
+        foreach (var raw in SplitTopLevel(argsText, ','))
+        {
+            var p = raw.Trim();
+            if (p.Length == 0) continue;
+
+            var defaultIdx = FindTopLevelKeyword(p, "DEFAULT");
+            if (defaultIdx < 0) defaultIdx = FindTopLevelChar(p, '=');
+            if (defaultIdx >= 0) p = p[..defaultIdx].Trim();
+            if (p.Length == 0) continue;
+
+            var mode = "IN";
+            var modeMatch = System.Text.RegularExpressions.Regex.Match(p, @"^(?i)(IN|OUT|INOUT|VARIADIC)\s+");
+            if (modeMatch.Success)
+            {
+                mode = modeMatch.Groups[1].Value.ToUpperInvariant();
+                p = p[modeMatch.Length..];
+            }
+            if (mode == "OUT") continue; // excluded from the overload signature
+
+            var tokens = p.Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries);
+            var type = (tokens.Length == 2 ? tokens[1] : p).Trim();
+            if (type.Length == 0) continue;
+
+            paramTypes.Add(mode == "IN" ? type : $"{mode} {type}");
+        }
+
+        return $"{name}({string.Join(", ", paramTypes)})";
+    }
+
+    private static IEnumerable<string> SplitTopLevel(string s, char sep)
+    {
+        int depth = 0, last = 0;
+        for (int i = 0; i < s.Length; i++)
+        {
+            if (s[i] == '(') depth++;
+            else if (s[i] == ')') depth--;
+            else if (s[i] == sep && depth == 0)
+            {
+                yield return s[last..i];
+                last = i + 1;
+            }
+        }
+        yield return s[last..];
+    }
+
+    private static int FindTopLevelKeyword(string s, string keyword)
+    {
+        int depth = 0;
+        for (int i = 0; i < s.Length; i++)
+        {
+            if (s[i] == '(') depth++;
+            else if (s[i] == ')') depth--;
+            else if (depth == 0 && i + keyword.Length <= s.Length
+                     && string.Compare(s, i, keyword, 0, keyword.Length, StringComparison.OrdinalIgnoreCase) == 0
+                     && (i == 0 || !char.IsLetterOrDigit(s[i - 1]))
+                     && (i + keyword.Length == s.Length || !char.IsLetterOrDigit(s[i + keyword.Length])))
+                return i;
+        }
+        return -1;
+    }
+
+    private static int FindTopLevelChar(string s, char c)
+    {
+        int depth = 0;
+        for (int i = 0; i < s.Length; i++)
+        {
+            if (s[i] == '(') depth++;
+            else if (s[i] == ')') depth--;
+            else if (depth == 0 && s[i] == c) return i;
+        }
+        return -1;
+    }
 
     private static IEnumerable<ComparisonResult> MissingInTarget(IList<ComparisonResult> results, SchemaObjectType type) =>
         results.Where(r => r.ObjectType == type && r.Status == ComparisonStatus.MissingInTarget);
