@@ -148,6 +148,17 @@ public class SyncScriptGenerator
                 var body = (r.SourceScript ?? r.DiffScript)?.Trim();
                 if (!string.IsNullOrWhiteSpace(body))
                 {
+                    // CREATE OR REPLACE FUNCTION/PROCEDURE cannot change the return type,
+                    // OUT-parameter types, or parameter defaults of an existing routine —
+                    // Postgres errors with "cannot change return type of existing function".
+                    // Since the routine already exists on the target (Mismatch, not
+                    // MissingInTarget), drop it first so CREATE always succeeds.
+                    if (r.Status == ComparisonStatus.Mismatch)
+                    {
+                        var kind = r.ObjectType == SchemaObjectType.Procedure ? "PROCEDURE" : "FUNCTION";
+                        funcSb.AppendLine($"DROP {kind} IF EXISTS {r.Name};");
+                    }
+
                     // pg_get_functiondef emits no trailing ';'. Without it the next
                     // CREATE runs into the previous body → "syntax error at or near CREATE".
                     if (!body.EndsWith(";")) body += ";";
@@ -159,10 +170,20 @@ public class SyncScriptGenerator
         }
 
         // ── SAFE: Views (CREATE OR REPLACE)
+        // r.SourceScript holds the bare SELECT body (pg_get_viewdef output has no
+        // "CREATE VIEW ... AS" wrapper) — the wrapper must be built here or the
+        // emitted "sync script" is just a dangling SELECT statement.
         foreach (var r in results.Where(r => r.ObjectType == SchemaObjectType.View
                      && (r.Status == ComparisonStatus.MissingInTarget || r.Status == ComparisonStatus.Mismatch)))
-            if (!string.IsNullOrWhiteSpace(r.SourceScript))
-                script.Safe.Add(Stmt("View", r.Name, r.SourceScript!, "View missing or changed in target"));
+        {
+            var body = r.SourceScript?.Trim();
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                if (body.EndsWith(";")) body = body[..^1].TrimEnd();
+                var viewSql = $"CREATE OR REPLACE VIEW {r.Name} AS\n{body};";
+                script.Safe.Add(Stmt("View", r.Name, viewSql, "View missing or changed in target"));
+            }
+        }
 
         // ── SAFE: Triggers
         foreach (var r in results.Where(r => r.ObjectType == SchemaObjectType.Trigger
