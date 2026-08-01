@@ -35,6 +35,30 @@ public class SchemaComparerTests
         Assert.Equal("orders", r.Name);
     }
 
+    [Fact]
+    public async Task Table_MissingInSource_ReportsMissingInSource()
+    {
+        var source = new MockSchemaProvider
+        {
+            Tables = ["orders"],
+            TableDefs = { ["orders"] = SimpleTable("orders", Col("id", "integer")) }
+        };
+        var target = new MockSchemaProvider
+        {
+            Tables = ["orders", "legacy_table"],
+            TableDefs =
+            {
+                ["orders"] = SimpleTable("orders", Col("id", "integer")),
+                ["legacy_table"] = SimpleTable("legacy_table", Col("id", "integer")),
+            }
+        };
+
+        var results = await CreateComparer().CompareAsync(source, target);
+
+        var r = Assert.Single(results.Where(x => x.ObjectType == SchemaObjectType.Table && x.Name == "legacy_table"));
+        Assert.Equal(ComparisonStatus.MissingInSource, r.Status);
+    }
+
     // ── 2. Missing column ────────────────────────────────────────────────────
 
     [Fact]

@@ -98,8 +98,12 @@ public record DbHealthDto(
     string ProfileName,
     string SourceDb,
     string TargetDb,
-    string Status,    // Healthy | Drift | Unknown
+    string Status,    // Healthy | Drift | ExtraInTarget | Unknown
     int TotalDrift,
+    // Source is the truth: mismatches and rows missing in target mean target needs a sync (critical).
+    int NeedsSyncCount,
+    // Rows missing in source only mean target has extra objects source doesn't (informational, not urgent).
+    int ExtraInTargetCount,
     DateTime? LastRunAt,
     Guid? LastRunId
 );

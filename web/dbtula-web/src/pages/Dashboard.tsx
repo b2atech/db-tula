@@ -75,10 +75,14 @@ function StatCard({ label, value, sub, icon: Icon, color }: {
 }
 
 function HealthCard({ health, onRun }: { health: DbHealth; onRun: () => void }) {
+  // Source is the truth: mismatch/missingInTarget mean target needs a sync (critical, red).
+  // missingInSource just means target has extra objects source doesn't — worth seeing but
+  // not urgent (informational, amber). "Healthy" only when both counts are zero.
   const statusMap = {
-    Healthy: { badge: 'success' as const, dot: 'bg-green-500', text: 'No drift' },
-    Drift: { badge: 'destructive' as const, dot: 'bg-red-500', text: `${health.totalDrift} issue${health.totalDrift !== 1 ? 's' : ''}` },
-    Unknown: { badge: 'secondary' as const, dot: 'bg-slate-400', text: 'Never run' },
+    Healthy:       { badge: 'success' as const,     dot: 'bg-green-500', text: 'No drift' },
+    Drift:         { badge: 'destructive' as const,  dot: 'bg-red-500',   text: `${health.needsSyncCount} needs sync` },
+    ExtraInTarget: { badge: 'warning' as const,      dot: 'bg-amber-400', text: `${health.extraInTargetCount} extra in target` },
+    Unknown:       { badge: 'secondary' as const,    dot: 'bg-slate-400', text: 'Never run' },
   }
   const s = statusMap[health.status]
 
@@ -90,9 +94,15 @@ function HealthCard({ health, onRun }: { health: DbHealth; onRun: () => void }) 
             <p className="font-medium text-slate-900 dark:text-text-primary text-sm truncate">{health.profileName}</p>
             <p className="text-xs text-slate-400 dark:text-text-muted mt-0.5 truncate">{health.sourceDb} → {health.targetDb}</p>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <div className={`h-2 w-2 rounded-full ${s.dot}`} />
-            <Badge variant={s.badge} className="text-xs">{s.text}</Badge>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <div className="flex items-center gap-1.5">
+              <div className={`h-2 w-2 rounded-full ${s.dot}`} />
+              <Badge variant={s.badge} className="text-xs">{s.text}</Badge>
+            </div>
+            {/* When both directions have drift, still surface the informational one */}
+            {health.status === 'Drift' && health.extraInTargetCount > 0 && (
+              <Badge variant="warning" className="text-xs">{health.extraInTargetCount} extra in target</Badge>
+            )}
           </div>
         </div>
         <div className="flex items-center justify-between">

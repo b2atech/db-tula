@@ -100,7 +100,7 @@ public class MetricsController(AppDbContext db) : ControllerBase
                 .FirstOrDefaultAsync();
 
             string status = "Unknown";
-            int totalDrift = 0;
+            int totalDrift = 0, needsSync = 0, extraInTarget = 0;
 
             if (last?.SummaryJson != null)
             {
@@ -108,13 +108,22 @@ public class MetricsController(AppDbContext db) : ControllerBase
                 var mismatch = doc.GetProperty("mismatch").GetInt32();
                 var missing = doc.GetProperty("missingInTarget").GetInt32();
                 var missingSource = doc.GetProperty("missingInSource").GetInt32();
-                totalDrift = mismatch + missing + missingSource;
-                status = totalDrift == 0 ? "Healthy" : "Drift";
+
+                // Source is the source of truth: mismatch/missingInTarget mean target needs
+                // a sync (critical, red). missingInSource just means target has extra objects
+                // source doesn't — worth surfacing but not urgent (informational, amber).
+                needsSync = mismatch + missing;
+                extraInTarget = missingSource;
+                totalDrift = needsSync + extraInTarget;
+
+                status = needsSync > 0 ? "Drift"
+                    : extraInTarget > 0 ? "ExtraInTarget"
+                    : "Healthy";
             }
 
             results.Add(new DbHealthDto(
                 p.Id, p.Name, p.SourceDb.Name, p.TargetDb.Name,
-                status, totalDrift, last?.CompletedAt, last?.Id));
+                status, totalDrift, needsSync, extraInTarget, last?.CompletedAt, last?.Id));
         }
 
         return Ok(results);

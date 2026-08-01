@@ -80,10 +80,17 @@ function LastRunBadge({ profile }: { profile: Profile }) {
   if (!profile.lastRunStatus) return <Badge variant="secondary">Never run</Badge>
   if (profile.lastRunStatus === 'Completed') {
     const s = profile.lastRunSummary ? JSON.parse(profile.lastRunSummary) : null
-    const drift = s ? s.mismatch + s.missingInTarget + s.missingInSource : 0
-    return drift === 0
-      ? <Badge variant="success">Clean</Badge>
-      : <Badge variant="destructive">{drift} drifts</Badge>
+    // Source is the truth: mismatch/missingInTarget mean target needs a sync (critical, red).
+    // missingInSource just means target has extra objects source doesn't — informational, amber.
+    const needsSync = s ? s.mismatch + s.missingInTarget : 0
+    const extraInTarget = s ? s.missingInSource : 0
+    if (needsSync === 0 && extraInTarget === 0) return <Badge variant="success">Clean</Badge>
+    return (
+      <div className="flex items-center gap-1.5">
+        {needsSync > 0 && <Badge variant="destructive">{needsSync} needs sync</Badge>}
+        {extraInTarget > 0 && <Badge variant="warning">{extraInTarget} extra in target</Badge>}
+      </div>
+    )
   }
   if (profile.lastRunStatus === 'Running') return <Badge variant="running">Running</Badge>
   return <Badge variant="destructive">Failed</Badge>

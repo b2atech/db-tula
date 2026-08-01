@@ -119,7 +119,7 @@ export type UserRole = 'Viewer' | 'Operator' | 'Admin';
 export type DbKind = 'Postgres' | 'MySql';
 export type DbEnvironment = 'QA' | 'UAT' | 'Prod' | 'Other';
 export type RunStatus = 'Pending' | 'Running' | 'Completed' | 'Failed';
-export type HealthStatus = 'Healthy' | 'Drift' | 'Unknown';
+export type HealthStatus = 'Healthy' | 'Drift' | 'ExtraInTarget' | 'Unknown';
 
 export interface User { id: string; email: string; name: string; role: UserRole; }
 
@@ -200,6 +200,7 @@ export interface DbHealth {
   profileId: string; profileName: string;
   sourceDb: string; targetDb: string;
   status: HealthStatus; totalDrift: number;
+  needsSyncCount: number; extraInTargetCount: number;
   lastRunAt: string | null; lastRunId: string | null;
 }
 
