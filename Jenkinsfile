@@ -14,6 +14,7 @@ pipeline {
     }
 
     environment {
+        PATH                = "$HOME/.dotnet:$PATH"
         DBTULA              = './publish/B2A.DbTula.Cli'
         DBTULA_SMTP_HOST    = 'smtp.gmail.com'
         DBTULA_SMTP_PORT    = '587'
@@ -29,6 +30,21 @@ pipeline {
             // revision matches what the trigger evaluated — no spurious every-poll rebuilds.
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Set up .NET') {
+            steps {
+                sh '''
+                    if command -v dotnet >/dev/null 2>&1 && dotnet --version | grep -q "^10"; then
+                        echo "DOTNET ALREADY INSTALLED - skipping download"
+                    else
+                        echo "Downloading .NET 10 installer..."
+                        wget -q https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
+                        chmod +x dotnet-install.sh
+                        ./dotnet-install.sh --channel 10.0
+                    fi
+                '''
             }
         }
 
