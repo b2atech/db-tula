@@ -41,4 +41,4 @@ sudo nginx -t && sudo systemctl reload nginx
 
 echo "=== Deployment complete ==="
 echo "API status: $(sudo systemctl is-active dbtula-api)"
-echo "Visit: http://dbtula.dhanman.com"
+echo "Visit: http://dbtula.dgtula.com"
